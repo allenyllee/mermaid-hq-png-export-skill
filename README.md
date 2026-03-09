@@ -45,7 +45,7 @@ block-beta
   os["OS"]:4
 ```
 
-輸出成高解析png
+Export to high-resolution PNG.
 ````
 
 The agent should render and output a high-resolution PNG directly from this prompt.
