@@ -30,6 +30,26 @@ python3 scripts/render_mermaid_png.py \
   --scale 4
 ```
 
+## Chat usage (direct prompt)
+
+In Codex chat, you can directly send Mermaid content and ask for high-resolution PNG output, for example:
+
+````text
+```mermaid
+block-beta
+  columns 4
+  gpio["GPIO"]:2 hwm["HWM"]:2
+  backend["Backend Adapter Layer"]:4
+  driver_up["Driver"]:1 cli["CLI"]:1 space:2
+  driver["Driver"]:2 space:2
+  os["OS"]:4
+```
+
+輸出成高解析png
+````
+
+The agent should render and output a high-resolution PNG directly from this prompt.
+
 ### Options
 
 - `--input`: Mermaid source file (`.mmd`)
