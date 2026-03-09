@@ -1,0 +1,4 @@
+interface:
+  display_name: "Mermaid HQ PNG Export"
+  short_description: "Render Mermaid to sharp high-res PNG with visible labels."
+  default_prompt: "Convert Mermaid code to non-blurry high-resolution PNG and keep labels visible."
