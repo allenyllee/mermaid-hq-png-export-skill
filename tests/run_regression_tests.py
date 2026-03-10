@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -39,6 +40,17 @@ def dark_pixel_ratio(path: pathlib.Path) -> float:
                     dark += 1
 
     return (dark / total) if total else 0.0
+
+
+def svg_viewbox(path: pathlib.Path) -> tuple[float, float, float, float]:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    match = re.search(r'viewBox="([^"]+)"', text)
+    if not match:
+        raise RuntimeError(f"Missing viewBox in SVG: {path}")
+    vals = [float(x) for x in match.group(1).split()]
+    if len(vals) != 4:
+        raise RuntimeError(f"Malformed viewBox in SVG: {path}")
+    return vals[0], vals[1], vals[2], vals[3]
 
 
 def run_renderer(args: list[str]) -> tuple[int, str, str]:
@@ -154,9 +166,38 @@ def main() -> int:
             else:
                 report("PASS", "mermaid_js_flowchart_text", f"dark ratio={ratio:.4f}")
 
-        # 4) kroki sanity check for block-beta case (expected to show text).
+        # 4) kroki-local should stay geometrically close to remote kroki on block-beta.
         block_src = CASES / "arch1-block-beta.mmd"
+        block_png_kroki_local = out / "arch1-kroki-local.png"
+        block_svg_kroki_local = out / "arch1-kroki-local.svg"
+        rc, so, se = run_renderer(
+            [
+                "--backend",
+                "kroki-local",
+                "--input",
+                str(block_src),
+                "--output",
+                str(block_png_kroki_local),
+                "--scale",
+                "3",
+                "--keep-svg",
+                str(block_svg_kroki_local),
+            ]
+        )
+        if rc != 0:
+            failures += 1
+            report("FAIL", "kroki_local_block_beta_render", f"renderer failed: {se.strip() or so.strip()}")
+        else:
+            ratio = dark_pixel_ratio(block_png_kroki_local)
+            if ratio < 0.01:
+                failures += 1
+                report("FAIL", "kroki_local_block_beta_text", f"dark ratio too low ({ratio:.4f})")
+            else:
+                report("PASS", "kroki_local_block_beta_text", f"dark ratio={ratio:.4f}")
+
+        # 5) kroki sanity check for block-beta case (expected to show text).
         block_png_kroki = out / "arch1-kroki.png"
+        block_svg_kroki = out / "arch1-kroki.svg"
         rc, so, se = run_renderer(
             [
                 "--backend",
@@ -167,6 +208,8 @@ def main() -> int:
                 str(block_png_kroki),
                 "--scale",
                 "3",
+                "--keep-svg",
+                str(block_svg_kroki),
             ]
         )
         if rc != 0:
@@ -180,7 +223,27 @@ def main() -> int:
             else:
                 report("PASS", "kroki_block_beta_text", f"dark ratio={ratio:.4f}")
 
-        # 5) mermaid-js sanity check for block-beta case.
+        if block_svg_kroki.exists() and block_svg_kroki_local.exists():
+            _, ky, kw, kh = svg_viewbox(block_svg_kroki)
+            _, ly, lw, lh = svg_viewbox(block_svg_kroki_local)
+            width_delta = abs(kw - lw) / kw if kw else 1.0
+            height_delta = abs(kh - lh) / kh if kh else 1.0
+            y_delta = abs(ky - ly)
+            if width_delta <= 0.02 and height_delta <= 0.10 and y_delta <= 10.0:
+                report(
+                    "PASS",
+                    "kroki_local_block_beta_geometry",
+                    f"width_delta={width_delta:.4f}, height_delta={height_delta:.4f}, y_delta={y_delta:.1f}",
+                )
+            else:
+                failures += 1
+                report(
+                    "FAIL",
+                    "kroki_local_block_beta_geometry",
+                    f"width_delta={width_delta:.4f}, height_delta={height_delta:.4f}, y_delta={y_delta:.1f}",
+                )
+
+        # 6) mermaid-js sanity check for block-beta case.
         block_png_mermaid = out / "arch1-mermaid-js.png"
         rc, so, se = run_renderer(
             [
