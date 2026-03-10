@@ -14,7 +14,7 @@ KROKI_URL = "https://kroki.io/mermaid/svg"
 INIT_LINE = '%%{init: { "flowchart": { "htmlLabels": false } } }%%\n'
 DEFAULT_NODE_VERSION = os.environ.get("MERMAID_SKILL_NODE_VERSION", "v24.14.0")
 DEFAULT_MERMAID_VERSION = os.environ.get("MERMAID_SKILL_MERMAID_VERSION", "11.13.0")
-DEFAULT_KROKI_LOCAL_MERMAID_VERSION = os.environ.get("MERMAID_SKILL_KROKI_LOCAL_VERSION", "11.6.0")
+DEFAULT_KROKI_LOCAL_MERMAID_VERSION = os.environ.get("MERMAID_SKILL_KROKI_LOCAL_VERSION", "11.12.3")
 DEFAULT_PUPPETEER_CORE_VERSION = os.environ.get("MERMAID_SKILL_PPTR_CORE_VERSION", "23.11.1")
 
 SKILL_LOCAL_ROOT = pathlib.Path.home() / ".local/mermaid-hq-png-export"
@@ -202,15 +202,38 @@ def resolve_chromium() -> str | None:
 
 
 def mermaid_js_modules_ready() -> bool:
-    mermaid_pkg = LOCAL_MERMAID_JS_ROOT / "node_modules" / "mermaid" / "package.json"
-    pptr_pkg = LOCAL_MERMAID_JS_ROOT / "node_modules" / "puppeteer-core" / "package.json"
-    return mermaid_pkg.exists() and pptr_pkg.exists()
+    return modules_match_expected(
+        module_root=LOCAL_MERMAID_JS_ROOT,
+        mermaid_version=DEFAULT_MERMAID_VERSION,
+        pptr_version=DEFAULT_PUPPETEER_CORE_VERSION,
+    )
 
 
 def kroki_local_modules_ready() -> bool:
-    mermaid_pkg = LOCAL_KROKI_LOCAL_ROOT / "node_modules" / "mermaid" / "package.json"
-    pptr_pkg = LOCAL_KROKI_LOCAL_ROOT / "node_modules" / "puppeteer-core" / "package.json"
-    return mermaid_pkg.exists() and pptr_pkg.exists()
+    return modules_match_expected(
+        module_root=LOCAL_KROKI_LOCAL_ROOT,
+        mermaid_version=DEFAULT_KROKI_LOCAL_MERMAID_VERSION,
+        pptr_version=DEFAULT_PUPPETEER_CORE_VERSION,
+    )
+
+
+def read_installed_package_version(module_root: pathlib.Path, package_name: str) -> str | None:
+    package_path = module_root / "node_modules" / package_name / "package.json"
+    if not package_path.exists():
+        return None
+    try:
+        data = json.loads(package_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    version = data.get("version")
+    return version if isinstance(version, str) else None
+
+
+def modules_match_expected(module_root: pathlib.Path, mermaid_version: str, pptr_version: str) -> bool:
+    return (
+        read_installed_package_version(module_root, "mermaid") == mermaid_version
+        and read_installed_package_version(module_root, "puppeteer-core") == pptr_version
+    )
 
 
 def install_mermaid_js() -> bool:

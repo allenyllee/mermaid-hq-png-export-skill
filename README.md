@@ -119,4 +119,5 @@ Expected:
 - This workflow produces native high-resolution output from source, not interpolation from an existing PNG.
 - In this skill, `flowchart` diagrams are safest with `mmdc` because Kroki+ffmpeg can lose text on some cases.
 - `kroki-local` uses a local CLI and aims to stay close to Kroki Mermaid geometry, but exact parity can still depend on Chromium/font environment.
+- `kroki-local` pins Mermaid to `11.12.3` to stay aligned with the Kroki version verified during development, and regression tests check that installed version.
 - `mermaid-js` is a separate local render path. It does not shell out to `mmdc`, but output can still differ because the pipeline is different.

@@ -51,6 +51,7 @@ python3 scripts/render_mermaid_png.py \
   - `curl` and `tar` are needed if Node.js must be downloaded automatically.
   - `kroki-local` packages are installed locally under `~/.local/mermaid-hq-png-export/kroki-mermaid-local-cli`.
   - `mermaid-js` packages are installed locally under `~/.local/mermaid-hq-png-export/mermaid-js-cli`.
+  - `kroki-local` pins Mermaid `11.12.3`, and regression tests verify the installed version matches.
 
 ## Regression Tests
 

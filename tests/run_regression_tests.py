@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import pathlib
 import re
 import subprocess
@@ -8,6 +9,7 @@ import tempfile
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 RENDERER = ROOT / "scripts" / "render_mermaid_png.py"
 CASES = pathlib.Path(__file__).resolve().parent / "cases"
+KROKI_LOCAL_ROOT = pathlib.Path.home() / ".local" / "mermaid-hq-png-export" / "kroki-mermaid-local-cli"
 
 
 def png_size(path: pathlib.Path) -> tuple[int, int]:
@@ -53,6 +55,26 @@ def svg_viewbox(path: pathlib.Path) -> tuple[float, float, float, float]:
     return vals[0], vals[1], vals[2], vals[3]
 
 
+def expected_kroki_local_version() -> str:
+    text = RENDERER.read_text(encoding="utf-8")
+    match = re.search(
+        r'DEFAULT_KROKI_LOCAL_MERMAID_VERSION = os\.environ\.get\("MERMAID_SKILL_KROKI_LOCAL_VERSION", "([^"]+)"\)',
+        text,
+    )
+    if not match:
+        raise RuntimeError("Could not find DEFAULT_KROKI_LOCAL_MERMAID_VERSION in renderer")
+    return match.group(1)
+
+
+def installed_package_version(module_root: pathlib.Path, package_name: str) -> str | None:
+    package_path = module_root / "node_modules" / package_name / "package.json"
+    if not package_path.exists():
+        return None
+    data = json.loads(package_path.read_text(encoding="utf-8"))
+    version = data.get("version")
+    return version if isinstance(version, str) else None
+
+
 def run_renderer(args: list[str]) -> tuple[int, str, str]:
     proc = subprocess.run(
         [sys.executable, str(RENDERER)] + args,
@@ -79,6 +101,7 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="mermaid-skill-regression-") as tmp:
         out = pathlib.Path(tmp)
+        expected_kroki_version = expected_kroki_local_version()
 
         # 1) mmdc regression: flowchart text must be visible in PNG.
         flow_src = CASES / "arch2-flowchart.mmd"
@@ -242,6 +265,17 @@ def main() -> int:
                     "kroki_local_block_beta_geometry",
                     f"width_delta={width_delta:.4f}, height_delta={height_delta:.4f}, y_delta={y_delta:.1f}",
                 )
+
+        installed_kroki_version = installed_package_version(KROKI_LOCAL_ROOT, "mermaid")
+        if installed_kroki_version == expected_kroki_version:
+            report("PASS", "kroki_local_mermaid_version", f"version={installed_kroki_version}")
+        else:
+            failures += 1
+            report(
+                "FAIL",
+                "kroki_local_mermaid_version",
+                f"expected={expected_kroki_version}, got={installed_kroki_version or 'missing'}",
+            )
 
         # 6) mermaid-js sanity check for block-beta case.
         block_png_mermaid = out / "arch1-mermaid-js.png"
