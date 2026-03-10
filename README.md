@@ -6,7 +6,8 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 
 - Defaults to local `mmdc` for PNG rendering (`.mmd -> .png`)
 - Auto-installs `mmdc` locally when missing
-- Falls back to Kroki only if `mmdc` install is unavailable
+- Adds a second local backend, `mermaid-js`, built from Mermaid JS library + Puppeteer Core + local Chromium
+- Falls back in this order: `mmdc` -> `mermaid-js` -> Kroki
 - Ensures labels stay visible by using Mermaid init config with `flowchart.htmlLabels=false`
 - Supports batch export for multiple `.mmd` files in one command
 
@@ -21,6 +22,7 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Python 3
 - Runtime:
   - Default path (`mmdc`) auto-installs local dependencies under `~/.local/mermaid-hq-png-export`
+  - `mermaid-js` needs a local Chromium/Chrome executable
   - Kroki path needs `curl` + `ffmpeg` + network access to `https://kroki.io`
 - For automatic Node.js bootstrap (when system Node is absent): `curl` and `tar`
 
@@ -66,7 +68,7 @@ The agent should render and output a high-resolution PNG directly from this prom
 
 ### Options
 
-- `--backend`: `mmdc` (default), `kroki`, or `auto`
+- `--backend`: `mmdc` (default), `mermaid-js`, `kroki`, or `auto`
 - `--input`: Mermaid source file (`.mmd`, single mode)
 - `--output`: Output PNG path (single mode)
 - `--scale`: Scale factor from SVG `viewBox` (default: `4.0`)
@@ -96,9 +98,11 @@ python3 tests/run_regression_tests.py
 
 Expected:
 - `mmdc_flowchart_text`: PASS
+- `mermaid_js_flowchart_text`: PASS
 - `kroki_flowchart_text`: XFAIL (known limitation for this flowchart case)
 
 ## Notes
 
 - This workflow produces native high-resolution output from source, not interpolation from an existing PNG.
 - In this skill, `flowchart` diagrams are safest with `mmdc` because Kroki+ffmpeg can lose text on some cases.
+- `mermaid-js` is a separate local render path. It does not shell out to `mmdc`, but output can still differ because the pipeline is different.

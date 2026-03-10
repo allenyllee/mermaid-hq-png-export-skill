@@ -126,7 +126,35 @@ def main() -> int:
             else:
                 report("PASS", "kroki_flowchart_text", f"limitation not observed (dark ratio={ratio:.4f})")
 
-        # 3) kroki sanity check for block-beta case (expected to show text).
+        # 3) mermaid-js regression: local Mermaid library backend should keep flowchart text.
+        flow_png_mermaid = out / "arch2-mermaid-js.png"
+        flow_svg_mermaid = out / "arch2-mermaid-js.svg"
+        rc, so, se = run_renderer(
+            [
+                "--backend",
+                "mermaid-js",
+                "--input",
+                str(flow_src),
+                "--output",
+                str(flow_png_mermaid),
+                "--scale",
+                "3",
+                "--keep-svg",
+                str(flow_svg_mermaid),
+            ]
+        )
+        if rc != 0:
+            failures += 1
+            report("FAIL", "mermaid_js_flowchart_text", f"renderer failed: {se.strip() or so.strip()}")
+        else:
+            ratio = dark_pixel_ratio(flow_png_mermaid)
+            if ratio < 0.01:
+                failures += 1
+                report("FAIL", "mermaid_js_flowchart_text", f"dark ratio too low ({ratio:.4f})")
+            else:
+                report("PASS", "mermaid_js_flowchart_text", f"dark ratio={ratio:.4f}")
+
+        # 4) kroki sanity check for block-beta case (expected to show text).
         block_src = CASES / "arch1-block-beta.mmd"
         block_png_kroki = out / "arch1-kroki.png"
         rc, so, se = run_renderer(
@@ -151,6 +179,31 @@ def main() -> int:
                 report("FAIL", "kroki_block_beta_text", f"unexpected low dark ratio ({ratio:.4f})")
             else:
                 report("PASS", "kroki_block_beta_text", f"dark ratio={ratio:.4f}")
+
+        # 5) mermaid-js sanity check for block-beta case.
+        block_png_mermaid = out / "arch1-mermaid-js.png"
+        rc, so, se = run_renderer(
+            [
+                "--backend",
+                "mermaid-js",
+                "--input",
+                str(block_src),
+                "--output",
+                str(block_png_mermaid),
+                "--scale",
+                "3",
+            ]
+        )
+        if rc != 0:
+            failures += 1
+            report("FAIL", "mermaid_js_block_beta_text", f"renderer failed: {se.strip() or so.strip()}")
+        else:
+            ratio = dark_pixel_ratio(block_png_mermaid)
+            if ratio < 0.01:
+                failures += 1
+                report("FAIL", "mermaid_js_block_beta_text", f"dark ratio too low ({ratio:.4f})")
+            else:
+                report("PASS", "mermaid_js_block_beta_text", f"dark ratio={ratio:.4f}")
 
     print(f"Summary: FAIL={failures}, XFAIL={xfails}")
     return 1 if failures else 0

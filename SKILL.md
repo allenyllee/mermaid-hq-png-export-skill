@@ -34,17 +34,20 @@ python3 scripts/render_mermaid_png.py \
 ## Why This Works
 
 - Default to `mmdc` for PNG output so flowchart labels are preserved.
+- Add a second local backend, `mermaid-js`, so there is a non-`mmdc`, non-network render path.
 - Auto-install local `mmdc` when missing (`~/.local/mermaid-hq-png-export`).
-- Fall back to `kroki` only when `mmdc` install is unavailable.
+- `auto` fallback order is `mmdc` -> `mermaid-js` -> `kroki`.
 - Keep Mermaid init config `flowchart.htmlLabels=false` to reduce label loss risk.
 
 ## Requirements
 
 - Runtime:
   - For default `mmdc`: no preinstalled `mmdc` required (script auto-installs).
+  - For `mermaid-js`: local Chromium/Chrome is required.
   - For `kroki` fallback/path: `curl`, `ffmpeg`, and network access to `https://kroki.io`.
 - Auto-install dependencies:
   - `curl` and `tar` are needed if Node.js must be downloaded automatically.
+  - `mermaid-js` packages are installed locally under `~/.local/mermaid-hq-png-export/mermaid-js-cli`.
 
 ## Regression Tests
 
@@ -56,11 +59,13 @@ python3 tests/run_regression_tests.py
 
 Expected behavior:
 - `mmdc_flowchart_text`: PASS
+- `mermaid_js_flowchart_text`: PASS
 - `kroki_flowchart_text`: XFAIL (known limitation: some flowcharts lose text in PNG)
 
 ## Troubleshooting
 
 - If local Chromium sandbox blocks `mmdc` in restricted environments, run outside sandbox or with compatible Chromium flags.
+- If `backend=mermaid-js` cannot start, set `MERMAID_SKILL_CHROME` to your Chromium/Chrome path.
 - If `mmdc` install fails and Kroki is unavailable, install Node.js + `@mermaid-js/mermaid-cli` manually.
 - If text still disappears, verify the SVG contains `<text>` nodes, not only `<foreignObject>`.
 - If output is too large/small, change `--scale`.
