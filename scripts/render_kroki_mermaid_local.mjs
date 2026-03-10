@@ -24,21 +24,26 @@ function parseArgs(argv) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const inputPath = path.resolve(args.input || '');
-  const outputSvg = path.resolve(args.outputSvg || '');
+  const outputSvg = args.outputSvg ? path.resolve(args.outputSvg) : '';
+  const outputPng = args.outputPng ? path.resolve(args.outputPng) : '';
   const moduleRoot = path.resolve(args.moduleRoot || '');
   const chromePath = path.resolve(args.chromePath || '');
+  const scale = Number(args.scale || '1');
 
   if (!inputPath) {
     throw new Error('--input is required');
   }
-  if (!outputSvg) {
-    throw new Error('--outputSvg is required');
+  if (!outputSvg && !outputPng) {
+    throw new Error('At least one of --outputSvg or --outputPng is required');
   }
   if (!moduleRoot) {
     throw new Error('--moduleRoot is required');
   }
   if (!chromePath) {
     throw new Error('--chromePath is required');
+  }
+  if (!Number.isFinite(scale) || scale <= 0) {
+    throw new Error('--scale must be > 0');
   }
 
   const requireFromRoot = createRequire(path.join(moduleRoot, 'resolver.cjs'));
@@ -58,7 +63,7 @@ async function main() {
     defaultViewport: {
       width: 800,
       height: 600,
-      deviceScaleFactor: 1,
+      deviceScaleFactor: scale,
     },
   });
 
@@ -87,9 +92,20 @@ async function main() {
     await page.setContent(html, { waitUntil: 'load' });
     const result = await page.evaluate(async (diagramSource) => {
       try {
+        await Promise.all(Array.from(document.fonts, (font) => font.load()));
+        const container = document.getElementById('container');
+        if (!container) {
+          throw new Error('Render container not found');
+        }
         mermaid.initialize({ startOnLoad: false });
-        const rendered = await mermaid.render('container', diagramSource);
-        return { svg: rendered.svg };
+        const rendered = await mermaid.render('kroki-local-svg', diagramSource);
+        container.innerHTML = rendered.svg;
+        const svg = container.getElementsByTagName('svg')[0];
+        if (!svg) {
+          throw new Error('Rendered output does not contain an svg element');
+        }
+        const xmlSerializer = new XMLSerializer();
+        return { svg: xmlSerializer.serializeToString(svg) };
       } catch (error) {
         return { error: String(error && error.stack ? error.stack : error) };
       }
@@ -99,9 +115,26 @@ async function main() {
       throw new Error(`Kroki-local Mermaid render failed: ${result.error}`);
     }
 
-    fs.mkdirSync(path.dirname(outputSvg), { recursive: true });
-    fs.writeFileSync(outputSvg, result.svg, 'utf8');
-    process.stdout.write(`${JSON.stringify({ svg: outputSvg })}\n`);
+    const clip = await page.$eval('svg', (svg) => {
+      const rect = svg.getBoundingClientRect();
+      return {
+        x: Math.floor(rect.left),
+        y: Math.floor(rect.top),
+        width: Math.ceil(rect.width),
+        height: Math.ceil(rect.height),
+      };
+    });
+
+    if (outputSvg) {
+      fs.mkdirSync(path.dirname(outputSvg), { recursive: true });
+      fs.writeFileSync(outputSvg, result.svg, 'utf8');
+    }
+    if (outputPng) {
+      fs.mkdirSync(path.dirname(outputPng), { recursive: true });
+      await page.setViewport({ width: clip.x + clip.width, height: clip.y + clip.height, deviceScaleFactor: scale });
+      await page.screenshot({ path: outputPng, clip, omitBackground: true });
+    }
+    process.stdout.write(`${JSON.stringify({ svg: outputSvg, png: outputPng, width: clip.width, height: clip.height })}\n`);
   } finally {
     await browser.close();
   }

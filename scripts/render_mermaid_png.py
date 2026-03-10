@@ -275,8 +275,6 @@ def resolve_backend(requested: str) -> str:
         return "kroki"
 
     if requested == "kroki-local":
-        if shutil.which("ffmpeg") is None:
-            raise SystemExit("backend=kroki-local requires `ffmpeg`")
         if resolve_chromium() is None:
             raise SystemExit("backend=kroki-local requires local Chromium/Chrome")
         if not install_kroki_local():
@@ -544,31 +542,50 @@ def render_png_kroki_local(
     scale: float,
     keep_svg_path: pathlib.Path | None,
 ) -> tuple[int, int]:
-    if shutil.which("ffmpeg") is None:
-        raise SystemExit("backend=kroki-local requires `ffmpeg`")
-
     source = prepare_mermaid_source(in_path.read_text(encoding="utf-8"))
-    svg = render_svg_kroki_local_source(source)
-    svg, out_w, out_h = resize_svg(svg, scale)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    if keep_svg_path is not None:
-        keep_svg_path.parent.mkdir(parents=True, exist_ok=True)
-        keep_svg_path.write_text(svg, encoding="utf-8")
-        svg_path = keep_svg_path
-    else:
-        tmp = tempfile.NamedTemporaryFile("w", suffix=".svg", delete=False, encoding="utf-8")
-        tmp.write(svg)
-        tmp.flush()
-        tmp.close()
-        svg_path = pathlib.Path(tmp.name)
+    node, _npm = resolve_node_tools()
+    if node is None:
+        raise SystemExit("backend=kroki-local requires Node.js")
+    if not kroki_local_modules_ready() and not install_kroki_local():
+        raise SystemExit("backend=kroki-local could not install required packages")
+    chrome_path = resolve_chromium()
+    if chrome_path is None:
+        raise SystemExit("backend=kroki-local requires local Chromium/Chrome")
 
-    try:
-        rasterize(svg_path, out_path)
-    finally:
-        if keep_svg_path is None and svg_path.exists():
-            svg_path.unlink(missing_ok=True)
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        mmd_path = tmpdir_path / "input.mmd"
+        svg_path = keep_svg_path if keep_svg_path is not None else tmpdir_path / "output.svg"
+        mmd_path.write_text(source, encoding="utf-8")
 
-    return out_w, out_h
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        if keep_svg_path is not None:
+            keep_svg_path.parent.mkdir(parents=True, exist_ok=True)
+
+        cmd = [
+            node,
+            str(LOCAL_KROKI_LOCAL_SCRIPT),
+            "--input",
+            str(mmd_path),
+            "--outputPng",
+            str(out_path),
+            "--outputSvg",
+            str(svg_path),
+            "--moduleRoot",
+            str(LOCAL_KROKI_LOCAL_ROOT),
+            "--chromePath",
+            chrome_path,
+            "--scale",
+            str(scale),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=mmdc_env())
+        if proc.returncode != 0:
+            err = proc.stderr.strip() or proc.stdout.strip() or "unknown kroki-local error"
+            raise SystemExit(f"kroki-local render failed: {err}")
+        if not out_path.exists():
+            raise SystemExit("kroki-local did not generate PNG output")
+
+    return read_png_size(out_path)
 
 
 def render_one(

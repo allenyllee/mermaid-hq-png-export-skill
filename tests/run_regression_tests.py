@@ -161,7 +161,35 @@ def main() -> int:
             else:
                 report("PASS", "kroki_flowchart_text", f"limitation not observed (dark ratio={ratio:.4f})")
 
-        # 3) kroki-local should stay geometrically close to remote kroki on block-beta.
+        # 3) kroki-local should preserve flowchart text using browser screenshot PNG output.
+        flow_png_kroki_local = out / "arch2-kroki-local.png"
+        flow_svg_kroki_local = out / "arch2-kroki-local.svg"
+        rc, so, se = run_renderer(
+            [
+                "--backend",
+                "kroki-local",
+                "--input",
+                str(flow_src),
+                "--output",
+                str(flow_png_kroki_local),
+                "--scale",
+                "3",
+                "--keep-svg",
+                str(flow_svg_kroki_local),
+            ]
+        )
+        if rc != 0:
+            failures += 1
+            report("FAIL", "kroki_local_flowchart_text", f"renderer failed: {se.strip() or so.strip()}")
+        else:
+            ratio = dark_pixel_ratio(flow_png_kroki_local)
+            if ratio < 0.01:
+                failures += 1
+                report("FAIL", "kroki_local_flowchart_text", f"dark ratio too low ({ratio:.4f})")
+            else:
+                report("PASS", "kroki_local_flowchart_text", f"dark ratio={ratio:.4f}")
+
+        # 4) kroki-local should stay geometrically close to remote kroki on block-beta.
         block_src = CASES / "arch1-block-beta.mmd"
         block_png_kroki_local = out / "arch1-kroki-local.png"
         block_svg_kroki_local = out / "arch1-kroki-local.svg"
@@ -190,7 +218,7 @@ def main() -> int:
             else:
                 report("PASS", "kroki_local_block_beta_text", f"dark ratio={ratio:.4f}")
 
-        # 4) kroki sanity check for block-beta case (expected to show text).
+        # 5) kroki sanity check for block-beta case (expected to show text).
         block_png_kroki = out / "arch1-kroki.png"
         block_svg_kroki = out / "arch1-kroki.svg"
         rc, so, se = run_renderer(

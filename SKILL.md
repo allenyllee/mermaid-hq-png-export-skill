@@ -43,7 +43,7 @@ python3 scripts/render_mermaid_png.py \
 
 - Runtime:
   - For default `mmdc`: no preinstalled `mmdc` required (script auto-installs).
-  - For `kroki-local`: local Chromium/Chrome and `ffmpeg` are required.
+  - For `kroki-local`: local Chromium/Chrome is required.
   - For `kroki` fallback/path: `curl`, `ffmpeg`, and network access to `https://kroki.io`.
 - Auto-install dependencies:
   - `curl` and `tar` are needed if Node.js must be downloaded automatically.
@@ -60,6 +60,7 @@ python3 tests/run_regression_tests.py
 
 Expected behavior:
 - `mmdc_flowchart_text`: PASS
+- `kroki_local_flowchart_text`: PASS
 - `kroki_local_block_beta_geometry`: PASS
 - `kroki_flowchart_text`: XFAIL (known limitation: some flowcharts lose text in PNG)
 
@@ -70,3 +71,9 @@ Expected behavior:
 - If `mmdc` install fails and Kroki is unavailable, install Node.js + `@mermaid-js/mermaid-cli` manually.
 - If text still disappears, verify the SVG contains `<text>` nodes, not only `<foreignObject>`.
 - If output is too large/small, change `--scale`.
+
+## Implementation Notes
+
+- `kroki-local` keeps a Kroki-style Mermaid SVG path, but PNG output uses browser screenshot instead of `ffmpeg`.
+- This change was chosen after verifying that serializer-only normalization does not fix flowchart labels when SVG still contains `foreignObject`.
+- `kroki-local` Mermaid is pinned to `11.12.3` because it stays closer to current Kroki layout than `11.13.0` in the tested `block-beta` case.

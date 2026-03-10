@@ -22,7 +22,7 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Python 3
 - Runtime:
   - Default path (`mmdc`) auto-installs local dependencies under `~/.local/mermaid-hq-png-export`
-  - `kroki-local` needs a local Chromium/Chrome executable and `ffmpeg`
+  - `kroki-local` needs a local Chromium/Chrome executable
   - Kroki path needs `curl` + `ffmpeg` + network access to `https://kroki.io`
 - For automatic Node.js bootstrap (when system Node is absent): `curl` and `tar`
 
@@ -108,12 +108,30 @@ python3 tests/run_regression_tests.py
 
 Expected:
 - `mmdc_flowchart_text`: PASS
+- `kroki_local_flowchart_text`: PASS
 - `kroki_local_block_beta_geometry`: PASS
 - `kroki_flowchart_text`: XFAIL (known limitation for this flowchart case)
 
 ## Notes
 
 - This workflow produces native high-resolution output from source, not interpolation from an existing PNG.
-- In this skill, `flowchart` diagrams are safest with `mmdc` because Kroki+ffmpeg can lose text on some cases.
+- `kroki-local` keeps Kroki-like SVG generation, but PNG output is produced by browser screenshot instead of `ffmpeg`. This preserves flowchart labels even when the SVG still contains `foreignObject`.
 - `kroki-local` uses a local CLI and aims to stay close to Kroki Mermaid geometry, but exact parity can still depend on Chromium/font environment.
 - `kroki-local` pins Mermaid to `11.12.3` to stay aligned with the Kroki version verified during development, and regression tests check that installed version.
+
+## Design Notes
+
+These implementation choices are based on direct experiments against `mmdc`, remote Kroki, and local Kroki-style rendering:
+
+- Remote `kroki` and early `kroki-local` PNG output used `SVG -> ffmpeg/librsvg -> PNG`.
+  - Result: some flowcharts lost labels in PNG.
+- Native `mmdc` PNG output kept labels visible on the same flowchart case.
+  - Its SVG still contained `foreignObject`, so the success was not caused by removing `foreignObject`.
+  - The important difference was PNG generation in the browser via screenshot.
+- Adding `XMLSerializer` normalization alone did not fix missing text.
+  - It made the SVG more XML-safe, but node labels still remained `foreignObject`.
+- Changing `kroki-local` PNG output to browser screenshot fixed the flowchart text-loss case.
+  - This is now the default `kroki-local` PNG path.
+- Mermaid version materially affects layout.
+  - `kroki-local` with Mermaid `11.12.3` stays much closer to current Kroki output than `11.13.0`.
+  - The skill therefore pins `kroki-local` Mermaid to `11.12.3`.
