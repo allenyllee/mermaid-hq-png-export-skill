@@ -33,6 +33,14 @@ def main() -> int:
             "Bootstrap failed: could not locate Chromium/Chrome for `kroki-local`.",
             file=sys.stderr,
         )
+        print(
+            "Install Chromium/Chrome first, or set `MERMAID_SKILL_CHROME` to the browser executable path.",
+            file=sys.stderr,
+        )
+        print(
+            "Note: this skill uses `puppeteer-core`, which does not download Chrome automatically.",
+            file=sys.stderr,
+        )
         return 1
 
     if not renderer.install_kroki_local():

@@ -56,6 +56,7 @@ python3 scripts/render_mermaid_png.py \
 - Runtime:
   - For default `mmdc`: no preinstalled `mmdc` required (script auto-installs).
   - For `kroki-local`: local Chromium/Chrome is required.
+    - The skill uses `puppeteer-core`, not `puppeteer`, so Chrome/Chromium is not downloaded automatically.
   - For `kroki` fallback/path: `curl` and network access to `https://kroki.io`.
     - The current `kroki` path fetches PNG directly from remote Kroki.
     - If `--keep-svg` is requested, the renderer fetches remote SVG separately and saves it locally.

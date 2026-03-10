@@ -25,6 +25,7 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Runtime:
   - Default path (`mmdc`) auto-installs local dependencies under `~/.local/mermaid-hq-png-export`
   - `kroki-local` needs a local Chromium/Chrome executable
+  - This skill uses `puppeteer-core`, not `puppeteer`, so Chrome/Chromium is not downloaded automatically
   - Kroki path needs `curl` + network access to `https://kroki.io`
   - Current `kroki` backend fetches PNG directly from remote Kroki
   - If `--keep-svg` is used with `kroki`, the script fetches remote SVG separately and saves it locally
@@ -44,6 +45,13 @@ This bootstrap step installs or verifies:
 - `kroki-local` pinned dependencies
 - Mermaid `11.12.3`
 - `puppeteer-core 23.11.1`
+
+You still need a local Chrome/Chromium executable for `kroki-local`.
+If it is not on the standard paths, set:
+
+```bash
+export MERMAID_SKILL_CHROME=/abs/path/to/chrome
+```
 
 ## Usage
 
