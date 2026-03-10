@@ -17,7 +17,8 @@ Use this command:
 python3 scripts/render_mermaid_png.py \
   --input /abs/path/diagram.mmd \
   --output /abs/path/diagram-4x.png \
-  --scale 4
+  --scale 4 \
+  --target-width 2000
 ```
 
 Batch mode:
@@ -37,8 +38,7 @@ python3 scripts/render_mermaid_png.py \
 - Auto-install local `mmdc` when missing (`~/.local/mermaid-hq-png-export`).
 - Fall back to `kroki` only when `mmdc` install is unavailable.
 - Keep Mermaid init config `flowchart.htmlLabels=false` to reduce label loss risk.
-- Default `--size-reference kroki` aligns `mmdc` output dimensions to Kroki per-diagram size.
-- Support `--target-width` for explicit fixed-width output when needed.
+- Support `--target-width` for stable final width across backends.
 
 ## Requirements
 
@@ -67,5 +67,4 @@ Expected behavior:
 - If local Chromium sandbox blocks `mmdc` in restricted environments, run outside sandbox or with compatible Chromium flags.
 - If `mmdc` install fails and Kroki is unavailable, install Node.js + `@mermaid-js/mermaid-cli` manually.
 - If text still disappears, verify the SVG contains `<text>` nodes, not only `<foreignObject>`.
-- If output size mismatch between backends is not desired, keep default `--size-reference kroki`.
 - If output is too large/small, change `--scale` or set `--target-width`.
