@@ -10,7 +10,8 @@ import subprocess
 import sys
 import tempfile
 
-KROKI_URL = "https://kroki.io/mermaid/svg"
+KROKI_SVG_URL = "https://kroki.io/mermaid/svg"
+KROKI_PNG_URL = "https://kroki.io/mermaid/png"
 DEFAULT_NODE_VERSION = os.environ.get("MERMAID_SKILL_NODE_VERSION", "v24.14.0")
 DEFAULT_KROKI_LOCAL_MERMAID_VERSION = os.environ.get("MERMAID_SKILL_KROKI_LOCAL_VERSION", "11.12.3")
 DEFAULT_PUPPETEER_CORE_VERSION = os.environ.get("MERMAID_SKILL_PPTR_CORE_VERSION", "23.11.1")
@@ -269,8 +270,6 @@ def resolve_backend(requested: str) -> str:
     if requested == "kroki":
         if shutil.which("curl") is None:
             raise SystemExit("backend=kroki requires `curl`")
-        if shutil.which("ffmpeg") is None:
-            raise SystemExit("backend=kroki requires `ffmpeg`")
         return "kroki"
 
     if requested == "kroki-local":
@@ -286,16 +285,16 @@ def resolve_backend(requested: str) -> str:
         if not install_mmdc():
             if resolve_chromium() is not None:
                 print("`mmdc` unavailable; trying backend=kroki-local.", file=sys.stderr)
-                if install_kroki_local() and shutil.which("ffmpeg"):
+                if install_kroki_local():
                     return "kroki-local"
-            if shutil.which("curl") and shutil.which("ffmpeg"):
+            if shutil.which("curl"):
                 print("`mmdc` unavailable; fallback to backend=kroki.", file=sys.stderr)
                 return "kroki"
             raise SystemExit("`mmdc` install failed and no fallback backend is available")
     return "mmdc"
 
 
-def fetch_svg_kroki(mermaid_source: str) -> str:
+def fetch_kroki(mermaid_source: str, url: str, *, binary: bool) -> bytes | str:
     cmd = [
         "curl",
         "-sS",
@@ -305,68 +304,26 @@ def fetch_svg_kroki(mermaid_source: str) -> str:
         "Content-Type: text/plain",
         "--data-binary",
         "@-",
-        KROKI_URL,
+        url,
     ]
-    proc = subprocess.run(cmd, input=mermaid_source, text=True, capture_output=True)
+    proc = subprocess.run(
+        cmd,
+        input=mermaid_source.encode("utf-8") if binary else mermaid_source,
+        text=not binary,
+        capture_output=True,
+    )
     if proc.returncode != 0:
         err = proc.stderr.strip() or "unknown curl error"
         raise RuntimeError(f"Kroki request failed: {err}")
-    svg = proc.stdout
+    return proc.stdout if not binary else proc.stdout
+
+
+def fetch_svg_kroki(mermaid_source: str) -> str:
+    svg = fetch_kroki(mermaid_source, KROKI_SVG_URL, binary=False)
     if "<svg" not in svg:
         preview = svg[:240].replace("\n", " ")
         raise RuntimeError(f"Kroki did not return SVG. Response: {preview}")
     return svg
-
-
-def resize_svg(svg: str, scale: float) -> tuple[str, int, int]:
-    root_match = re.search(r"<svg\b[^>]*>", svg)
-    if not root_match:
-        raise SystemExit("Invalid SVG: cannot find <svg> root tag")
-
-    root = root_match.group(0)
-    vb_match = re.search(r'viewBox="([^"]+)"', root)
-    if not vb_match:
-        raise SystemExit("Invalid SVG: missing viewBox")
-
-    vb_vals = vb_match.group(1).split()
-    if len(vb_vals) != 4:
-        raise SystemExit("Invalid SVG: malformed viewBox")
-
-    vb_w = float(vb_vals[2])
-    vb_h = float(vb_vals[3])
-    out_w = max(1, int(round(vb_w * scale)))
-    out_h = max(1, int(round(vb_h * scale)))
-
-    root = re.sub(r'\sstyle="max-width:[^"]*;"', "", root)
-    if re.search(r'\swidth="[^"]+"', root):
-        root = re.sub(r'width="[^"]+"', f'width="{out_w}"', root, count=1)
-    else:
-        root = root.replace("<svg", f'<svg width="{out_w}"', 1)
-
-    if re.search(r'\sheight="[^"]+"', root):
-        root = re.sub(r'height="[^"]+"', f'height="{out_h}"', root, count=1)
-    else:
-        root = root.replace("<svg", f'<svg height="{out_h}"', 1)
-
-    updated_svg = svg[: root_match.start()] + root + svg[root_match.end() :]
-    return updated_svg, out_w, out_h
-
-
-def rasterize(svg_path: pathlib.Path, png_path: pathlib.Path) -> None:
-    cmd = [
-        "ffmpeg",
-        "-y",
-        "-i",
-        str(svg_path),
-        "-frames:v",
-        "1",
-        "-update",
-        "1",
-        str(png_path),
-    ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise SystemExit(f"ffmpeg failed:\n{proc.stderr}")
 
 
 def read_png_size(png_path: pathlib.Path) -> tuple[int, int]:
@@ -384,35 +341,26 @@ def render_png_kroki(
     scale: float,
     keep_svg_path: pathlib.Path | None,
 ) -> tuple[int, int]:
-    if shutil.which("curl") is None or shutil.which("ffmpeg") is None:
-        raise SystemExit("backend=kroki requires `curl` and `ffmpeg`")
+    if shutil.which("curl") is None:
+        raise SystemExit("backend=kroki requires `curl`")
 
     source = in_path.read_text(encoding="utf-8")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        svg = fetch_svg_kroki(source)
+        png_bytes = fetch_kroki(source, KROKI_PNG_URL, binary=True)
     except RuntimeError as exc:
         raise SystemExit(str(exc))
+    out_path.write_bytes(png_bytes)
 
-    svg, out_w, out_h = resize_svg(svg, scale)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
     if keep_svg_path is not None:
+        try:
+            svg = fetch_svg_kroki(source)
+        except RuntimeError as exc:
+            raise SystemExit(str(exc))
         keep_svg_path.parent.mkdir(parents=True, exist_ok=True)
         keep_svg_path.write_text(svg, encoding="utf-8")
-        svg_path = keep_svg_path
-    else:
-        tmp = tempfile.NamedTemporaryFile("w", suffix=".svg", delete=False, encoding="utf-8")
-        tmp.write(svg)
-        tmp.flush()
-        tmp.close()
-        svg_path = pathlib.Path(tmp.name)
 
-    try:
-        rasterize(svg_path, out_path)
-    finally:
-        if keep_svg_path is None and svg_path.exists():
-            svg_path.unlink(missing_ok=True)
-
-    return out_w, out_h
+    return read_png_size(out_path)
 
 
 def render_png_mmdc(

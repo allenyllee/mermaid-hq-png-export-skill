@@ -44,8 +44,9 @@ python3 scripts/render_mermaid_png.py \
 - Runtime:
   - For default `mmdc`: no preinstalled `mmdc` required (script auto-installs).
   - For `kroki-local`: local Chromium/Chrome is required.
-  - For `kroki` fallback/path: `curl`, `ffmpeg`, and network access to `https://kroki.io`.
-    - The current `kroki` path fetches SVG from remote Kroki and rasterizes PNG locally.
+  - For `kroki` fallback/path: `curl` and network access to `https://kroki.io`.
+    - The current `kroki` path fetches PNG directly from remote Kroki.
+    - If `--keep-svg` is requested, the renderer fetches remote SVG separately and saves it locally.
 - Auto-install dependencies:
   - `curl` and `tar` are needed if Node.js must be downloaded automatically.
   - `kroki-local` packages are installed locally under `~/.local/mermaid-hq-png-export/kroki-mermaid-local-cli`.
@@ -61,9 +62,9 @@ python3 tests/run_regression_tests.py
 
 Expected behavior:
 - `mmdc_flowchart_text`: PASS
+- `kroki_flowchart_text`: PASS
 - `kroki_local_flowchart_text`: PASS
 - `kroki_local_block_beta_geometry`: PASS
-- `kroki_flowchart_text`: XFAIL (known limitation: some flowcharts lose text in PNG)
 
 ## Troubleshooting
 

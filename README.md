@@ -22,8 +22,9 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Runtime:
   - Default path (`mmdc`) auto-installs local dependencies under `~/.local/mermaid-hq-png-export`
   - `kroki-local` needs a local Chromium/Chrome executable
-- Kroki path needs `curl` + `ffmpeg` + network access to `https://kroki.io`
-  - Current `kroki` backend fetches SVG from remote Kroki, then rasterizes PNG locally with `ffmpeg`
+  - Kroki path needs `curl` + network access to `https://kroki.io`
+  - Current `kroki` backend fetches PNG directly from remote Kroki
+  - If `--keep-svg` is used with `kroki`, the script fetches remote SVG separately and saves it locally
 - For automatic Node.js bootstrap (when system Node is absent): `curl` and `tar`
 
 ## Usage
@@ -108,16 +109,18 @@ python3 tests/run_regression_tests.py
 
 Expected:
 - `mmdc_flowchart_text`: PASS
+- `kroki_flowchart_text`: PASS
 - `kroki_local_flowchart_text`: PASS
 - `kroki_local_block_beta_geometry`: PASS
 - `mmdc_flowchart_html_style`: PASS
 - `kroki-local_block_beta_html_style`: PASS
-- `kroki_flowchart_text`: XFAIL (known limitation for this flowchart case)
 
 ## Notes
 
 - This workflow produces native high-resolution output from source, not interpolation from an existing PNG.
 - `kroki-local` keeps Kroki-like SVG generation, but PNG output is produced by browser screenshot instead of `ffmpeg`. This preserves flowchart labels even when the SVG still contains `foreignObject`.
+- `kroki` PNG output now comes directly from remote Kroki instead of local `ffmpeg` rasterization. This keeps the backend aligned with actual Kroki PNG behavior, especially for tested `block-beta` cases.
+- In the current regression suite, remote direct Kroki PNG also removes the earlier flowchart text-loss seen with `remote SVG + local rasterize`.
 - `kroki-local` uses a local CLI and aims to stay close to Kroki Mermaid geometry, but exact parity can still depend on Chromium/font environment.
 - `kroki-local` pins Mermaid to `11.12.3` to stay aligned with the Kroki version verified during development, and regression tests check that installed version.
 
@@ -125,7 +128,7 @@ Expected:
 
 These implementation choices are based on direct experiments against `mmdc`, remote Kroki, and local Kroki-style rendering:
 
-- Remote `kroki` and early `kroki-local` PNG output used `SVG -> ffmpeg/librsvg -> PNG`.
+- Early `kroki-local` PNG output used `SVG -> ffmpeg/librsvg -> PNG`.
   - Result: some flowcharts lost labels in PNG.
 - Native `mmdc` PNG output kept labels visible on the same flowchart case.
   - Its SVG still contained `foreignObject`, so the success was not caused by removing `foreignObject`.
@@ -138,6 +141,8 @@ These implementation choices are based on direct experiments against `mmdc`, rem
   - It caused `block-beta` labels to render raw HTML tags instead of styled content.
   - It also pushed remote `kroki` flowcharts back toward the text-loss path.
   - The skill no longer injects `flowchart.htmlLabels=false` by default.
+- A later Kroki comparison showed that remote direct PNG matches real Kroki behavior better than `remote SVG + local rasterize`.
+  - The skill therefore no longer uses local `ffmpeg` for the `kroki` backend.
 - Mermaid version materially affects layout.
   - `kroki-local` with Mermaid `11.12.3` stays much closer to current Kroki output than `11.13.0`.
   - The skill therefore pins `kroki-local` Mermaid to `11.12.3`.
