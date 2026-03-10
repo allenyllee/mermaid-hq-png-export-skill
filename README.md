@@ -30,7 +30,8 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 python3 scripts/render_mermaid_png.py \
   --input /abs/path/diagram.mmd \
   --output /abs/path/diagram-4x.png \
-  --scale 4
+  --scale 4 \
+  --target-width 2000
 ```
 
 ## Batch usage
@@ -70,6 +71,7 @@ The agent should render and output a high-resolution PNG directly from this prom
 - `--input`: Mermaid source file (`.mmd`, single mode)
 - `--output`: Output PNG path (single mode)
 - `--scale`: Scale factor from SVG `viewBox` (default: `4.0`)
+- `--target-width`: Optional fixed output width in pixels (single or batch mode)
 - `--keep-svg`: Optional path to save the intermediate SVG (single mode)
 - `--batch-dir`: Input directory for batch mode
 - `--output-dir`: Output directory for batch mode
@@ -85,6 +87,7 @@ python3 scripts/render_mermaid_png.py \
   --input ./examples/arch.mmd \
   --output ./out/arch-8x.png \
   --scale 8 \
+  --target-width 2400 \
   --keep-svg ./out/arch-8x.svg
 ```
 
@@ -96,7 +99,9 @@ python3 tests/run_regression_tests.py
 
 Expected:
 - `mmdc_flowchart_text`: PASS
+- `mmdc_target_width`: PASS
 - `kroki_flowchart_text`: XFAIL (known limitation for this flowchart case)
+- `kroki_target_width`: PASS (when Kroki is reachable)
 
 ## Notes
 

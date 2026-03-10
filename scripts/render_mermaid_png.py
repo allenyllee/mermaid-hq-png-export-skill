@@ -211,7 +211,7 @@ def fetch_svg_kroki(mermaid_source: str) -> str:
     return svg
 
 
-def resize_svg(svg: str, scale: float) -> tuple[str, int, int]:
+def get_viewbox_size(svg: str) -> tuple[float, float]:
     root_match = re.search(r"<svg\b[^>]*>", svg)
     if not root_match:
         raise SystemExit("Invalid SVG: cannot find <svg> root tag")
@@ -225,10 +225,22 @@ def resize_svg(svg: str, scale: float) -> tuple[str, int, int]:
     if len(vb_vals) != 4:
         raise SystemExit("Invalid SVG: malformed viewBox")
 
-    vb_w = float(vb_vals[2])
-    vb_h = float(vb_vals[3])
-    out_w = max(1, int(round(vb_w * scale)))
-    out_h = max(1, int(round(vb_h * scale)))
+    return float(vb_vals[2]), float(vb_vals[3])
+
+
+def resize_svg(svg: str, scale: float, target_width: int | None = None) -> tuple[str, int, int]:
+    root_match = re.search(r"<svg\b[^>]*>", svg)
+    if not root_match:
+        raise SystemExit("Invalid SVG: cannot find <svg> root tag")
+
+    root = root_match.group(0)
+    vb_w, vb_h = get_viewbox_size(svg)
+    if target_width is not None:
+        out_w = max(1, int(target_width))
+        out_h = max(1, int(round(vb_h * (out_w / vb_w))))
+    else:
+        out_w = max(1, int(round(vb_w * scale)))
+        out_h = max(1, int(round(vb_h * scale)))
 
     root = re.sub(r'\sstyle="max-width:[^"]*;"', "", root)
     if re.search(r'\swidth="[^"]+"', root):
@@ -262,6 +274,24 @@ def rasterize(svg_path: pathlib.Path, png_path: pathlib.Path) -> None:
         raise SystemExit(f"ffmpeg failed:\n{proc.stderr}")
 
 
+def resize_png_width(png_path: pathlib.Path, target_width: int) -> None:
+    tmp_path = png_path.with_suffix(".resized.png")
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(png_path),
+        "-vf",
+        f"scale={target_width}:-1:flags=lanczos",
+        str(tmp_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        err = proc.stderr.strip() or "unknown ffmpeg error"
+        raise SystemExit(f"ffmpeg resize failed: {err}")
+    tmp_path.replace(png_path)
+
+
 def read_png_size(png_path: pathlib.Path) -> tuple[int, int]:
     data = png_path.read_bytes()
     if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n":
@@ -276,6 +306,7 @@ def render_png_kroki(
     out_path: pathlib.Path,
     scale: float,
     keep_svg_path: pathlib.Path | None,
+    target_width: int | None,
 ) -> tuple[int, int]:
     if shutil.which("curl") is None or shutil.which("ffmpeg") is None:
         raise SystemExit("backend=kroki requires `curl` and `ffmpeg`")
@@ -287,7 +318,7 @@ def render_png_kroki(
     except RuntimeError as exc:
         raise SystemExit(str(exc))
 
-    svg, out_w, out_h = resize_svg(svg, scale)
+    svg, out_w, out_h = resize_svg(svg, scale, target_width)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if keep_svg_path is not None:
         keep_svg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -314,6 +345,7 @@ def render_png_mmdc(
     out_path: pathlib.Path,
     scale: float,
     keep_svg_path: pathlib.Path | None,
+    target_width: int | None,
 ) -> tuple[int, int]:
     mmdc = resolve_mmdc()
     if mmdc is None:
@@ -326,6 +358,7 @@ def render_png_mmdc(
         tmpdir_path = pathlib.Path(tmpdir)
         mmd_path = tmpdir_path / "input.mmd"
         pptr_path = tmpdir_path / "puppeteer.json"
+        probe_svg_path = tmpdir_path / "probe.svg"
         mmd_path.write_text(source, encoding="utf-8")
         pptr_path.write_text(
             json.dumps(
@@ -340,6 +373,28 @@ def render_png_mmdc(
             encoding="utf-8",
         )
 
+        mmdc_scale = max(1, int(round(scale)))
+        if target_width is not None:
+            probe_cmd = [
+                mmdc,
+                "-p",
+                str(pptr_path),
+                "-i",
+                str(mmd_path),
+                "-o",
+                str(probe_svg_path),
+                "-e",
+                "svg",
+                "-q",
+            ]
+            probe_proc = subprocess.run(probe_cmd, capture_output=True, text=True, env=mmdc_env())
+            if probe_proc.returncode != 0:
+                err = probe_proc.stderr.strip() or "unknown mmdc error"
+                raise SystemExit(f"mmdc SVG probe failed: {err}")
+            svg_probe = probe_svg_path.read_text(encoding="utf-8", errors="replace")
+            vb_w, _ = get_viewbox_size(svg_probe)
+            mmdc_scale = max(1, int(round(float(target_width) / vb_w)))
+
         out_path.parent.mkdir(parents=True, exist_ok=True)
         png_cmd = [
             mmdc,
@@ -352,7 +407,7 @@ def render_png_mmdc(
             "-e",
             "png",
             "-s",
-            str(scale),
+            str(mmdc_scale),
             "-b",
             "transparent",
             "-q",
@@ -383,6 +438,17 @@ def render_png_mmdc(
                 err = svg_proc.stderr.strip() or "unknown mmdc error"
                 raise SystemExit(f"mmdc SVG export failed: {err}")
 
+    if target_width is not None:
+        current_w, _ = read_png_size(out_path)
+        if current_w != target_width:
+            if shutil.which("ffmpeg") is None:
+                print(
+                    f"Warning: requested width={target_width}, got width={current_w}; `ffmpeg` not found for exact resize.",
+                    file=sys.stderr,
+                )
+            else:
+                resize_png_width(out_path, target_width)
+
     return read_png_size(out_path)
 
 
@@ -391,6 +457,7 @@ def render_one(
     out_path: pathlib.Path,
     scale: float,
     backend: str,
+    target_width: int | None,
     keep_svg_path: pathlib.Path | None = None,
 ) -> tuple[int, int, str]:
     if backend == "mmdc":
@@ -399,6 +466,7 @@ def render_one(
             out_path=out_path,
             scale=scale,
             keep_svg_path=keep_svg_path,
+            target_width=target_width,
         )
         return out_w, out_h, "mmdc"
 
@@ -407,6 +475,7 @@ def render_one(
         out_path=out_path,
         scale=scale,
         keep_svg_path=keep_svg_path,
+        target_width=target_width,
     )
     return out_w, out_h, "kroki"
 
@@ -429,6 +498,7 @@ def run_single(args: argparse.Namespace) -> int:
         out_path=out_path,
         scale=args.scale,
         backend=args.backend,
+        target_width=args.target_width,
         keep_svg_path=keep_svg_path,
     )
     print(f"Rendered: {out_path}")
@@ -460,6 +530,7 @@ def run_batch(args: argparse.Namespace) -> int:
                 out_path=out_path,
                 scale=args.scale,
                 backend=args.backend,
+                target_width=args.target_width,
                 keep_svg_path=keep_svg_path,
             )
             print(f"[OK] {in_path.name} -> {out_path.name} ({out_w}x{out_h}, backend={used_backend})")
@@ -476,6 +547,12 @@ def run_batch(args: argparse.Namespace) -> int:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Render Mermaid to native high-res PNG")
     parser.add_argument("--scale", type=float, default=4.0, help="Scale factor from SVG/Puppeteer")
+    parser.add_argument(
+        "--target-width",
+        type=int,
+        default=0,
+        help="Optional fixed output width in pixels (overrides effective width from --scale).",
+    )
     parser.add_argument(
         "--backend",
         choices=("auto", "kroki", "mmdc"),
@@ -503,6 +580,8 @@ def parse_args() -> argparse.Namespace:
     args = parser.parse_args()
     if args.scale <= 0:
         raise SystemExit("--scale must be > 0")
+    if args.target_width < 0:
+        raise SystemExit("--target-width must be >= 0")
 
     if args.input:
         if not args.output:
@@ -510,6 +589,7 @@ def parse_args() -> argparse.Namespace:
     elif not args.output_dir:
         raise SystemExit("--output-dir is required when using --batch-dir")
 
+    args.target_width = args.target_width or None
     args.backend = resolve_backend(args.backend)
     return args
 
