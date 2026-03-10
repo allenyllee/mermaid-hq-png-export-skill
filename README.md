@@ -72,7 +72,7 @@ The agent should render and output a high-resolution PNG directly from this prom
 - `--backend`: `mmdc` (default), `kroki-local`, `kroki`, or `auto`
 - `--input`: Mermaid source file (`.mmd`, single mode)
 - `--output`: Output PNG path (single mode)
-- `--scale`: Scale factor from SVG `viewBox` (default: `4.0`)
+- `--scale`: Scale factor for local backends (`mmdc`, `kroki-local`). Remote `kroki` PNG output ignores local scaling.
 - `--keep-svg`: Optional path to save the intermediate SVG (single mode)
 - `--batch-dir`: Input directory for batch mode
 - `--output-dir`: Output directory for batch mode
@@ -121,6 +121,7 @@ Expected:
 - `kroki-local` keeps Kroki-like SVG generation, but PNG output is produced by browser screenshot instead of `ffmpeg`. This preserves flowchart labels even when the SVG still contains `foreignObject`.
 - `kroki` PNG output now comes directly from remote Kroki instead of local `ffmpeg` rasterization. This keeps the backend aligned with actual Kroki PNG behavior, especially for tested `block-beta` cases.
 - In the current regression suite, remote direct Kroki PNG also removes the earlier flowchart text-loss seen with `remote SVG + local rasterize`.
+- When `backend=kroki`, the script prints a warning if `--scale` is not `1`, because remote Kroki PNG size is returned as-is.
 - `kroki-local` uses a local CLI and aims to stay close to Kroki Mermaid geometry, but exact parity can still depend on Chromium/font environment.
 - `kroki-local` pins Mermaid to `11.12.3` to stay aligned with the Kroki version verified during development, and regression tests check that installed version.
 

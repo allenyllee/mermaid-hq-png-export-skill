@@ -47,6 +47,7 @@ python3 scripts/render_mermaid_png.py \
   - For `kroki` fallback/path: `curl` and network access to `https://kroki.io`.
     - The current `kroki` path fetches PNG directly from remote Kroki.
     - If `--keep-svg` is requested, the renderer fetches remote SVG separately and saves it locally.
+    - `--scale` does not change remote Kroki PNG size; the renderer warns when `backend=kroki` is used with a scale other than `1`.
 - Auto-install dependencies:
   - `curl` and `tar` are needed if Node.js must be downloaded automatically.
   - `kroki-local` packages are installed locally under `~/.local/mermaid-hq-png-export/kroki-mermaid-local-cli`.

@@ -573,6 +573,12 @@ def run_single(args: argparse.Namespace) -> int:
     out_path = pathlib.Path(args.output).expanduser().resolve()
     keep_svg_path = pathlib.Path(args.keep_svg).expanduser().resolve() if args.keep_svg else None
 
+    if args.backend == "kroki" and args.scale != 1.0:
+        print(
+            "Warning: backend=kroki ignores local raster scaling; remote Kroki PNG size is used as-is.",
+            file=sys.stderr,
+        )
+
     out_w, out_h, used_backend = render_one(
         in_path=in_path,
         out_path=out_path,
@@ -597,6 +603,12 @@ def run_batch(args: argparse.Namespace) -> int:
     inputs = collect_inputs(batch_dir, args.pattern, args.recursive)
     if not inputs:
         raise SystemExit(f"No input files found in {batch_dir} with pattern: {args.pattern}")
+
+    if args.backend == "kroki" and args.scale != 1.0:
+        print(
+            "Warning: backend=kroki ignores local raster scaling; remote Kroki PNG size is used as-is.",
+            file=sys.stderr,
+        )
 
     failures = 0
     for in_path in inputs:
@@ -624,7 +636,12 @@ def run_batch(args: argparse.Namespace) -> int:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Render Mermaid to native high-res PNG")
-    parser.add_argument("--scale", type=float, default=4.0, help="Scale factor from SVG/Puppeteer")
+    parser.add_argument(
+        "--scale",
+        type=float,
+        default=4.0,
+        help="Scale factor for local backends (`mmdc`, `kroki-local`). Remote `kroki` PNG output ignores local scaling.",
+    )
     parser.add_argument(
         "--backend",
         choices=("auto", "kroki", "kroki-local", "mmdc"),
