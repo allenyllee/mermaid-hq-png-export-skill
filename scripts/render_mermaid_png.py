@@ -228,14 +228,101 @@ def get_viewbox_size(svg: str) -> tuple[float, float]:
     return float(vb_vals[2]), float(vb_vals[3])
 
 
-def resize_svg(svg: str, scale: float, target_width: int | None = None) -> tuple[str, int, int]:
+def render_svg_mmdc_source(source: str) -> str:
+    mmdc = resolve_mmdc()
+    if mmdc is None:
+        raise RuntimeError("Missing required tool: mmdc")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = pathlib.Path(tmpdir)
+        mmd_path = tmpdir_path / "input.mmd"
+        pptr_path = tmpdir_path / "puppeteer.json"
+        svg_path = tmpdir_path / "output.svg"
+        mmd_path.write_text(source, encoding="utf-8")
+        pptr_path.write_text(
+            json.dumps(
+                {
+                    "args": [
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage",
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        cmd = [
+            mmdc,
+            "-p",
+            str(pptr_path),
+            "-i",
+            str(mmd_path),
+            "-o",
+            str(svg_path),
+            "-e",
+            "svg",
+            "-q",
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, env=mmdc_env())
+        if proc.returncode != 0:
+            err = proc.stderr.strip() or "unknown mmdc error"
+            raise RuntimeError(f"mmdc SVG render failed: {err}")
+        if not svg_path.exists():
+            raise RuntimeError("mmdc did not generate SVG output")
+        return svg_path.read_text(encoding="utf-8", errors="replace")
+
+
+def reference_target_size(
+    *,
+    source: str,
+    backend: str,
+    scale: float,
+    target_width: int | None,
+    size_reference: str,
+) -> tuple[int, int] | None:
+    if target_width is not None:
+        return target_width, 0
+    if size_reference == "none":
+        return None
+
+    if size_reference == "cross":
+        ref_backend = "kroki" if backend == "mmdc" else "mmdc"
+    else:
+        ref_backend = size_reference
+
+    if ref_backend == backend:
+        return None
+
+    try:
+        if ref_backend == "kroki":
+            vb_w, vb_h = get_viewbox_size(fetch_svg_kroki(source))
+        else:
+            vb_w, vb_h = get_viewbox_size(render_svg_mmdc_source(source))
+        return max(1, int(round(vb_w * scale))), max(1, int(round(vb_h * scale)))
+    except RuntimeError as exc:
+        print(f"Warning: cannot get {ref_backend} reference size: {exc}", file=sys.stderr)
+        return None
+    except SystemExit as exc:
+        print(f"Warning: cannot get {ref_backend} reference size: {exc}", file=sys.stderr)
+        return None
+
+
+def resize_svg(
+    svg: str,
+    scale: float,
+    target_width: int | None = None,
+    target_height: int | None = None,
+) -> tuple[str, int, int]:
     root_match = re.search(r"<svg\b[^>]*>", svg)
     if not root_match:
         raise SystemExit("Invalid SVG: cannot find <svg> root tag")
 
     root = root_match.group(0)
     vb_w, vb_h = get_viewbox_size(svg)
-    if target_width is not None:
+    if target_width is not None and target_height is not None and target_height > 0:
+        out_w = max(1, int(target_width))
+        out_h = max(1, int(target_height))
+    elif target_width is not None:
         out_w = max(1, int(target_width))
         out_h = max(1, int(round(vb_h * (out_w / vb_w))))
     else:
@@ -292,6 +379,24 @@ def resize_png_width(png_path: pathlib.Path, target_width: int) -> None:
     tmp_path.replace(png_path)
 
 
+def resize_png_exact(png_path: pathlib.Path, target_width: int, target_height: int) -> None:
+    tmp_path = png_path.with_suffix(".resized.png")
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        str(png_path),
+        "-vf",
+        f"scale={target_width}:{target_height}:flags=lanczos",
+        str(tmp_path),
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        err = proc.stderr.strip() or "unknown ffmpeg error"
+        raise SystemExit(f"ffmpeg exact resize failed: {err}")
+    tmp_path.replace(png_path)
+
+
 def read_png_size(png_path: pathlib.Path) -> tuple[int, int]:
     data = png_path.read_bytes()
     if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n":
@@ -302,23 +407,22 @@ def read_png_size(png_path: pathlib.Path) -> tuple[int, int]:
 
 
 def render_png_kroki(
-    in_path: pathlib.Path,
+    source: str,
     out_path: pathlib.Path,
     scale: float,
     keep_svg_path: pathlib.Path | None,
     target_width: int | None,
+    target_height: int | None,
 ) -> tuple[int, int]:
     if shutil.which("curl") is None or shutil.which("ffmpeg") is None:
         raise SystemExit("backend=kroki requires `curl` and `ffmpeg`")
 
-    source = in_path.read_text(encoding="utf-8")
-    source = prepare_mermaid_source(source)
     try:
         svg = fetch_svg_kroki(source)
     except RuntimeError as exc:
         raise SystemExit(str(exc))
 
-    svg, out_w, out_h = resize_svg(svg, scale, target_width)
+    svg, out_w, out_h = resize_svg(svg, scale, target_width, target_height)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if keep_svg_path is not None:
         keep_svg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -341,18 +445,16 @@ def render_png_kroki(
 
 
 def render_png_mmdc(
-    in_path: pathlib.Path,
+    source: str,
     out_path: pathlib.Path,
     scale: float,
     keep_svg_path: pathlib.Path | None,
     target_width: int | None,
+    target_height: int | None,
 ) -> tuple[int, int]:
     mmdc = resolve_mmdc()
     if mmdc is None:
         raise SystemExit("Missing required tool: mmdc")
-
-    source = in_path.read_text(encoding="utf-8")
-    source = prepare_mermaid_source(source)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = pathlib.Path(tmpdir)
@@ -439,8 +541,18 @@ def render_png_mmdc(
                 raise SystemExit(f"mmdc SVG export failed: {err}")
 
     if target_width is not None:
-        current_w, _ = read_png_size(out_path)
-        if current_w != target_width:
+        current_w, current_h = read_png_size(out_path)
+        if target_height is not None and target_height > 0:
+            if current_w != target_width or current_h != target_height:
+                if shutil.which("ffmpeg") is None:
+                    print(
+                        f"Warning: requested size={target_width}x{target_height}, got {current_w}x{current_h}; "
+                        "`ffmpeg` not found for exact resize.",
+                        file=sys.stderr,
+                    )
+                else:
+                    resize_png_exact(out_path, target_width, target_height)
+        elif current_w != target_width:
             if shutil.which("ffmpeg") is None:
                 print(
                     f"Warning: requested width={target_width}, got width={current_w}; `ffmpeg` not found for exact resize.",
@@ -457,25 +569,40 @@ def render_one(
     out_path: pathlib.Path,
     scale: float,
     backend: str,
+    size_reference: str,
     target_width: int | None,
     keep_svg_path: pathlib.Path | None = None,
 ) -> tuple[int, int, str]:
+    source = in_path.read_text(encoding="utf-8")
+    source = prepare_mermaid_source(source)
+    target_size = reference_target_size(
+        source=source,
+        backend=backend,
+        scale=scale,
+        target_width=target_width,
+        size_reference=size_reference,
+    )
+    final_target_width = target_size[0] if target_size is not None else None
+    final_target_height = target_size[1] if target_size is not None and target_size[1] > 0 else None
+
     if backend == "mmdc":
         out_w, out_h = render_png_mmdc(
-            in_path=in_path,
+            source=source,
             out_path=out_path,
             scale=scale,
             keep_svg_path=keep_svg_path,
-            target_width=target_width,
+            target_width=final_target_width,
+            target_height=final_target_height,
         )
         return out_w, out_h, "mmdc"
 
     out_w, out_h = render_png_kroki(
-        in_path=in_path,
+        source=source,
         out_path=out_path,
         scale=scale,
         keep_svg_path=keep_svg_path,
-        target_width=target_width,
+        target_width=final_target_width,
+        target_height=final_target_height,
     )
     return out_w, out_h, "kroki"
 
@@ -498,6 +625,7 @@ def run_single(args: argparse.Namespace) -> int:
         out_path=out_path,
         scale=args.scale,
         backend=args.backend,
+        size_reference=args.size_reference,
         target_width=args.target_width,
         keep_svg_path=keep_svg_path,
     )
@@ -530,6 +658,7 @@ def run_batch(args: argparse.Namespace) -> int:
                 out_path=out_path,
                 scale=args.scale,
                 backend=args.backend,
+                size_reference=args.size_reference,
                 target_width=args.target_width,
                 keep_svg_path=keep_svg_path,
             )
@@ -551,7 +680,14 @@ def parse_args() -> argparse.Namespace:
         "--target-width",
         type=int,
         default=0,
-        help="Optional fixed output width in pixels (overrides effective width from --scale).",
+        help="Optional fixed output width in pixels. Set 0 to disable fixed width and use scale/reference logic.",
+    )
+    parser.add_argument(
+        "--size-reference",
+        choices=("cross", "none", "kroki", "mmdc"),
+        default="kroki",
+        help="Dimension reference mode when --target-width is not set. "
+        "`cross` matches the opposite backend for consistent size between mmdc and kroki.",
     )
     parser.add_argument(
         "--backend",
