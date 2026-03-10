@@ -8,6 +8,8 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Auto-installs `mmdc` locally when missing
 - Adds `kroki-local`, a local CLI/backend intended to stay close to Kroki Mermaid output
 - Falls back in this order: `mmdc` -> `kroki-local` -> Kroki
+- For high-resolution PNG requests, prefer `mmdc` or `kroki-local`
+- Use remote `kroki` only when Kroki output is explicitly required
 - Supports batch export for multiple `.mmd` files in one command
 
 ## Repository structure
@@ -66,6 +68,10 @@ Export to high-resolution PNG.
 ````
 
 The agent should render and output a high-resolution PNG directly from this prompt.
+
+Backend selection rule:
+- If the user asks for a high-resolution PNG, prefer `mmdc` first, then `kroki-local`.
+- If the user explicitly asks for `kroki`, use `kroki` and warn that remote PNG size is fixed; `--scale` will not change it.
 
 ### Options
 

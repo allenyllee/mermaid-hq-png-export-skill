@@ -8,8 +8,12 @@ description: Render Mermaid diagrams into high-resolution PNG with sharp text (n
 ## Workflow
 
 1. Save Mermaid text to a `.mmd` file.
-2. Run `scripts/render_mermaid_png.py` to render PNG natively from SVG.
-3. Return the output path and rendered pixel size.
+2. Choose backend by intent:
+   - If the user wants a high-resolution PNG, prefer `mmdc` first, then `kroki-local`.
+   - Use `kroki` only when the user explicitly asks for Kroki output or Kroki compatibility.
+   - If using `kroki`, tell the user that remote PNG size is fixed and `--scale` will not change it.
+3. Run `scripts/render_mermaid_png.py` to render PNG natively from SVG.
+4. Return the output path and rendered pixel size.
 
 Use this command:
 
@@ -37,6 +41,7 @@ python3 scripts/render_mermaid_png.py \
 - Add `kroki-local`, a local CLI/backend that targets Kroki-like Mermaid output.
 - Auto-install local `mmdc` when missing (`~/.local/mermaid-hq-png-export`).
 - `auto` fallback order is `mmdc` -> `kroki-local` -> `kroki`.
+- For high-resolution requests, prefer `mmdc` or `kroki-local`; do not choose remote `kroki` unless the user specifically wants Kroki output.
 - Do not inject `flowchart.htmlLabels=false` by default; it breaks HTML-styled labels in tested `block-beta` cases.
 
 ## Requirements
