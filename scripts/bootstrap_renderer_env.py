@@ -48,6 +48,7 @@ def main() -> int:
     print(f"Node: {node or 'missing'}")
     print(f"npm: {npm or 'missing'}")
     print(f"mmdc: {mmdc or 'missing'}")
+    print(f"kroki-local launcher: {pptr_pkg}")
     print(f"Chrome: {chrome_path or 'bundled via puppeteer'}")
     print(f"kroki-local mermaid: {mermaid_version or 'missing'}")
     print(f"kroki-local {pptr_pkg}: {pptr_val or 'missing'}")
