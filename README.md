@@ -4,9 +4,10 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 
 ## What this skill does
 
-- Re-renders Mermaid source via Kroki or local `mmdc` (`.mmd -> .svg`)
+- Defaults to local `mmdc` for PNG rendering (`.mmd -> .png`)
+- Auto-installs `mmdc` locally when missing
+- Falls back to Kroki only if `mmdc` install is unavailable
 - Ensures labels stay visible by using Mermaid init config with `flowchart.htmlLabels=false`
-- Converts SVG to PNG with `ffmpeg` at a target scale (for example 2x, 4x, 8x)
 - Supports batch export for multiple `.mmd` files in one command
 
 ## Repository structure
@@ -18,10 +19,10 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 ## Requirements
 
 - Python 3
-- `ffmpeg`
-- One Mermaid render backend:
-  - `curl` + network access to `https://kroki.io` (Kroki backend)
-  - or local `mmdc` in PATH (offline/local backend)
+- Runtime:
+  - Default path (`mmdc`) auto-installs local dependencies under `~/.local/mermaid-hq-png-export`
+  - Kroki path needs `curl` + `ffmpeg` + network access to `https://kroki.io`
+- For automatic Node.js bootstrap (when system Node is absent): `curl` and `tar`
 
 ## Usage
 
@@ -29,8 +30,7 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 python3 scripts/render_mermaid_png.py \
   --input /abs/path/diagram.mmd \
   --output /abs/path/diagram-4x.png \
-  --scale 4 \
-  --backend auto
+  --scale 4
 ```
 
 ## Batch usage
@@ -41,8 +41,7 @@ python3 scripts/render_mermaid_png.py \
   --output-dir /abs/path/png-output \
   --pattern '*.mmd' \
   --recursive \
-  --scale 4 \
-  --backend auto
+  --scale 4
 ```
 
 ## Chat usage (direct prompt)
@@ -67,7 +66,7 @@ The agent should render and output a high-resolution PNG directly from this prom
 
 ### Options
 
-- `--backend`: `auto` (default), `kroki`, or `mmdc`
+- `--backend`: `mmdc` (default), `kroki`, or `auto`
 - `--input`: Mermaid source file (`.mmd`, single mode)
 - `--output`: Output PNG path (single mode)
 - `--scale`: Scale factor from SVG `viewBox` (default: `4.0`)
@@ -86,12 +85,20 @@ python3 scripts/render_mermaid_png.py \
   --input ./examples/arch.mmd \
   --output ./out/arch-8x.png \
   --scale 8 \
-  --backend auto \
   --keep-svg ./out/arch-8x.svg
 ```
+
+## Regression tests
+
+```bash
+python3 tests/run_regression_tests.py
+```
+
+Expected:
+- `mmdc_flowchart_text`: PASS
+- `kroki_flowchart_text`: XFAIL (known limitation for this flowchart case)
 
 ## Notes
 
 - This workflow produces native high-resolution output from source, not interpolation from an existing PNG.
-- `--backend auto` tries Kroki first, then falls back to local `mmdc`.
-- If Kroki rendering fails due to network, use `--backend mmdc` for local/offline rendering.
+- In this skill, `flowchart` diagrams are safest with `mmdc` because Kroki+ffmpeg can lose text on some cases.

@@ -17,8 +17,7 @@ Use this command:
 python3 scripts/render_mermaid_png.py \
   --input /abs/path/diagram.mmd \
   --output /abs/path/diagram-4x.png \
-  --scale 4 \
-  --backend auto
+  --scale 4
 ```
 
 Batch mode:
@@ -34,20 +33,34 @@ python3 scripts/render_mermaid_png.py \
 
 ## Why This Works
 
-- Render from Mermaid source again instead of scaling an old PNG.
-- Add Mermaid init config `flowchart.htmlLabels=false` (if not present) so text is emitted as SVG `<text>`, avoiding dropped labels during rasterization.
-- Set explicit SVG width/height from `viewBox * scale` before converting to PNG.
-- Support backend fallback: `auto` tries Kroki first and falls back to local `mmdc` if network rendering fails.
+- Default to `mmdc` for PNG output so flowchart labels are preserved.
+- Auto-install local `mmdc` when missing (`~/.local/mermaid-hq-png-export`).
+- Fall back to `kroki` only when `mmdc` install is unavailable.
+- Keep Mermaid init config `flowchart.htmlLabels=false` to reduce label loss risk.
 
 ## Requirements
 
-- `ffmpeg` in PATH.
-- For `--backend kroki` (or `auto` primary path): `curl` and network access to `https://kroki.io`.
-- For `--backend mmdc` (or `auto` fallback path): `mmdc` in PATH.
+- Runtime:
+  - For default `mmdc`: no preinstalled `mmdc` required (script auto-installs).
+  - For `kroki` fallback/path: `curl`, `ffmpeg`, and network access to `https://kroki.io`.
+- Auto-install dependencies:
+  - `curl` and `tar` are needed if Node.js must be downloaded automatically.
+
+## Regression Tests
+
+Run regression tests from the skill root:
+
+```bash
+python3 tests/run_regression_tests.py
+```
+
+Expected behavior:
+- `mmdc_flowchart_text`: PASS
+- `kroki_flowchart_text`: XFAIL (known limitation: some flowcharts lose text in PNG)
 
 ## Troubleshooting
 
-- If DNS/network fails, retry with network-enabled execution.
-- If network is unavailable, set `--backend mmdc` or keep `--backend auto` with local `mmdc` installed.
+- If local Chromium sandbox blocks `mmdc` in restricted environments, run outside sandbox or with compatible Chromium flags.
+- If `mmdc` install fails and Kroki is unavailable, install Node.js + `@mermaid-js/mermaid-cli` manually.
 - If text still disappears, verify the SVG contains `<text>` nodes, not only `<foreignObject>`.
 - If output is too large/small, change `--scale`.
