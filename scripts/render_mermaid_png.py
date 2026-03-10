@@ -13,7 +13,6 @@ import tempfile
 KROKI_URL = "https://kroki.io/mermaid/svg"
 INIT_LINE = '%%{init: { "flowchart": { "htmlLabels": false } } }%%\n'
 DEFAULT_NODE_VERSION = os.environ.get("MERMAID_SKILL_NODE_VERSION", "v24.14.0")
-DEFAULT_MERMAID_VERSION = os.environ.get("MERMAID_SKILL_MERMAID_VERSION", "11.13.0")
 DEFAULT_KROKI_LOCAL_MERMAID_VERSION = os.environ.get("MERMAID_SKILL_KROKI_LOCAL_VERSION", "11.12.3")
 DEFAULT_PUPPETEER_CORE_VERSION = os.environ.get("MERMAID_SKILL_PPTR_CORE_VERSION", "23.11.1")
 
@@ -22,12 +21,10 @@ LOCAL_NODE_ROOT = SKILL_LOCAL_ROOT / "node"
 LOCAL_NODE_CURRENT = LOCAL_NODE_ROOT / "current"
 LOCAL_NODE_BIN = LOCAL_NODE_CURRENT / "bin"
 LOCAL_NPM_GLOBAL = SKILL_LOCAL_ROOT / "npm-global"
-LOCAL_MERMAID_JS_ROOT = SKILL_LOCAL_ROOT / "mermaid-js-cli"
 LOCAL_KROKI_LOCAL_ROOT = SKILL_LOCAL_ROOT / "kroki-mermaid-local-cli"
 LOCAL_MMDC = LOCAL_NPM_GLOBAL / "bin" / "mmdc"
 LEGACY_MMDC = pathlib.Path.home() / ".local/node/current/bin/mmdc"
 LEGACY_NODE_BIN = pathlib.Path.home() / ".local/node/current/bin"
-LOCAL_MERMAID_JS_SCRIPT = pathlib.Path(__file__).with_name("render_mermaid_local.mjs")
 LOCAL_KROKI_LOCAL_SCRIPT = pathlib.Path(__file__).with_name("render_kroki_mermaid_local.mjs")
 
 
@@ -201,14 +198,6 @@ def resolve_chromium() -> str | None:
     return None
 
 
-def mermaid_js_modules_ready() -> bool:
-    return modules_match_expected(
-        module_root=LOCAL_MERMAID_JS_ROOT,
-        mermaid_version=DEFAULT_MERMAID_VERSION,
-        pptr_version=DEFAULT_PUPPETEER_CORE_VERSION,
-    )
-
-
 def kroki_local_modules_ready() -> bool:
     return modules_match_expected(
         module_root=LOCAL_KROKI_LOCAL_ROOT,
@@ -234,47 +223,6 @@ def modules_match_expected(module_root: pathlib.Path, mermaid_version: str, pptr
         read_installed_package_version(module_root, "mermaid") == mermaid_version
         and read_installed_package_version(module_root, "puppeteer-core") == pptr_version
     )
-
-
-def install_mermaid_js() -> bool:
-    if mermaid_js_modules_ready():
-        return True
-
-    node, npm = resolve_node_tools()
-    if not (node and npm):
-        if not install_local_node():
-            return False
-        node, npm = resolve_node_tools()
-    if not (node and npm):
-        return False
-
-    chrome_path = resolve_chromium()
-    if chrome_path is None:
-        print(
-            "Cannot enable backend=mermaid-js: no Chromium/Chrome executable found.",
-            file=sys.stderr,
-        )
-        return False
-
-    LOCAL_MERMAID_JS_ROOT.mkdir(parents=True, exist_ok=True)
-    cmd = [
-        npm,
-        "install",
-        "--prefix",
-        str(LOCAL_MERMAID_JS_ROOT),
-        "--no-fund",
-        "--no-audit",
-        "--save-exact",
-        f"mermaid@{DEFAULT_MERMAID_VERSION}",
-        f"puppeteer-core@{DEFAULT_PUPPETEER_CORE_VERSION}",
-    ]
-    print("Installing local Mermaid JS renderer dependencies...", file=sys.stderr)
-    proc = run_cmd(cmd, env=mmdc_env())
-    if proc.returncode != 0:
-        err = (proc.stderr or proc.stdout).strip() or "npm install failed"
-        print(f"mermaid-js install failed: {err}", file=sys.stderr)
-        return False
-    return mermaid_js_modules_ready()
 
 
 def install_kroki_local() -> bool:
@@ -335,13 +283,6 @@ def resolve_backend(requested: str) -> str:
             raise SystemExit("backend=kroki-local could not install required packages")
         return "kroki-local"
 
-    if requested == "mermaid-js":
-        if resolve_chromium() is None:
-            raise SystemExit("backend=mermaid-js requires local Chromium/Chrome")
-        if not install_mermaid_js():
-            raise SystemExit("backend=mermaid-js could not install required packages")
-        return "mermaid-js"
-
     # requested == mmdc or auto
     if resolve_mmdc() is None:
         print("`mmdc` not found. Trying local install...", file=sys.stderr)
@@ -350,9 +291,6 @@ def resolve_backend(requested: str) -> str:
                 print("`mmdc` unavailable; trying backend=kroki-local.", file=sys.stderr)
                 if install_kroki_local() and shutil.which("ffmpeg"):
                     return "kroki-local"
-                print("`kroki-local` unavailable; trying backend=mermaid-js.", file=sys.stderr)
-                if install_mermaid_js():
-                    return "mermaid-js"
             if shutil.which("curl") and shutil.which("ffmpeg"):
                 print("`mmdc` unavailable; fallback to backend=kroki.", file=sys.stderr)
                 return "kroki"
@@ -564,55 +502,6 @@ def render_png_mmdc(
     return read_png_size(out_path)
 
 
-def render_png_mermaid_js(
-    in_path: pathlib.Path,
-    out_path: pathlib.Path,
-    scale: float,
-    keep_svg_path: pathlib.Path | None,
-) -> tuple[int, int]:
-    node, _npm = resolve_node_tools()
-    if node is None:
-        raise SystemExit("backend=mermaid-js requires Node.js")
-    if not mermaid_js_modules_ready() and not install_mermaid_js():
-        raise SystemExit("backend=mermaid-js could not install required packages")
-    chrome_path = resolve_chromium()
-    if chrome_path is None:
-        raise SystemExit("backend=mermaid-js requires local Chromium/Chrome")
-
-    source = prepare_mermaid_source(in_path.read_text(encoding="utf-8"))
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = pathlib.Path(tmpdir)
-        mmd_path = tmpdir_path / "input.mmd"
-        mmd_path.write_text(source, encoding="utf-8")
-
-        cmd = [
-            node,
-            str(LOCAL_MERMAID_JS_SCRIPT),
-            "--input",
-            str(mmd_path),
-            "--output",
-            str(out_path),
-            "--moduleRoot",
-            str(LOCAL_MERMAID_JS_ROOT),
-            "--chromePath",
-            chrome_path,
-            "--scale",
-            str(scale),
-        ]
-        if keep_svg_path is not None:
-            keep_svg_path.parent.mkdir(parents=True, exist_ok=True)
-            cmd.extend(["--outputSvg", str(keep_svg_path)])
-
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        proc = subprocess.run(cmd, capture_output=True, text=True, env=mmdc_env())
-        if proc.returncode != 0:
-            err = proc.stderr.strip() or proc.stdout.strip() or "unknown mermaid-js error"
-            raise SystemExit(f"mermaid-js render failed: {err}")
-        if not out_path.exists():
-            raise SystemExit("mermaid-js did not generate PNG output")
-    return read_png_size(out_path)
-
-
 def render_svg_kroki_local_source(source: str) -> str:
     node, _npm = resolve_node_tools()
     if node is None:
@@ -697,14 +586,6 @@ def render_one(
             keep_svg_path=keep_svg_path,
         )
         return out_w, out_h, "mmdc"
-    if backend == "mermaid-js":
-        out_w, out_h = render_png_mermaid_js(
-            in_path=in_path,
-            out_path=out_path,
-            scale=scale,
-            keep_svg_path=keep_svg_path,
-        )
-        return out_w, out_h, "mermaid-js"
     if backend == "kroki-local":
         out_w, out_h = render_png_kroki_local(
             in_path=in_path,
@@ -790,9 +671,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scale", type=float, default=4.0, help="Scale factor from SVG/Puppeteer")
     parser.add_argument(
         "--backend",
-        choices=("auto", "kroki", "kroki-local", "mmdc", "mermaid-js"),
+        choices=("auto", "kroki", "kroki-local", "mmdc"),
         default="mmdc",
-        help="Default `mmdc`. If unavailable, `auto` tries `mmdc`, then `kroki-local`, then `mermaid-js`, then kroki.",
+        help="Default `mmdc`. If unavailable, `auto` tries `mmdc`, then `kroki-local`, then kroki.",
     )
 
     mode = parser.add_mutually_exclusive_group(required=True)

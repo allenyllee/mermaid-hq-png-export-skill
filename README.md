@@ -7,8 +7,7 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Defaults to local `mmdc` for PNG rendering (`.mmd -> .png`)
 - Auto-installs `mmdc` locally when missing
 - Adds `kroki-local`, a local CLI/backend intended to stay close to Kroki Mermaid output
-- Adds a second local backend, `mermaid-js`, built from Mermaid JS library + Puppeteer Core + local Chromium
-- Falls back in this order: `mmdc` -> `kroki-local` -> `mermaid-js` -> Kroki
+- Falls back in this order: `mmdc` -> `kroki-local` -> Kroki
 - Ensures labels stay visible by using Mermaid init config with `flowchart.htmlLabels=false`
 - Supports batch export for multiple `.mmd` files in one command
 
@@ -24,7 +23,6 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Runtime:
   - Default path (`mmdc`) auto-installs local dependencies under `~/.local/mermaid-hq-png-export`
   - `kroki-local` needs a local Chromium/Chrome executable and `ffmpeg`
-  - `mermaid-js` needs a local Chromium/Chrome executable
   - Kroki path needs `curl` + `ffmpeg` + network access to `https://kroki.io`
 - For automatic Node.js bootstrap (when system Node is absent): `curl` and `tar`
 
@@ -70,7 +68,7 @@ The agent should render and output a high-resolution PNG directly from this prom
 
 ### Options
 
-- `--backend`: `mmdc` (default), `kroki-local`, `mermaid-js`, `kroki`, or `auto`
+- `--backend`: `mmdc` (default), `kroki-local`, `kroki`, or `auto`
 - `--input`: Mermaid source file (`.mmd`, single mode)
 - `--output`: Output PNG path (single mode)
 - `--scale`: Scale factor from SVG `viewBox` (default: `4.0`)
@@ -111,7 +109,6 @@ python3 tests/run_regression_tests.py
 Expected:
 - `mmdc_flowchart_text`: PASS
 - `kroki_local_block_beta_geometry`: PASS
-- `mermaid_js_flowchart_text`: PASS
 - `kroki_flowchart_text`: XFAIL (known limitation for this flowchart case)
 
 ## Notes
@@ -120,4 +117,3 @@ Expected:
 - In this skill, `flowchart` diagrams are safest with `mmdc` because Kroki+ffmpeg can lose text on some cases.
 - `kroki-local` uses a local CLI and aims to stay close to Kroki Mermaid geometry, but exact parity can still depend on Chromium/font environment.
 - `kroki-local` pins Mermaid to `11.12.3` to stay aligned with the Kroki version verified during development, and regression tests check that installed version.
-- `mermaid-js` is a separate local render path. It does not shell out to `mmdc`, but output can still differ because the pipeline is different.
