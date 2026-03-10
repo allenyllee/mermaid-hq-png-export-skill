@@ -10,6 +10,7 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Falls back in this order: `mmdc` -> `kroki-local` -> Kroki
 - For high-resolution PNG requests, prefer `mmdc` or `kroki-local`
 - Use remote `kroki` only when Kroki output is explicitly required
+- Provides an explicit bootstrap step so the skill does not assume the installer already has the correct local package versions
 - Supports batch export for multiple `.mmd` files in one command
 
 ## Repository structure
@@ -28,6 +29,21 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
   - Current `kroki` backend fetches PNG directly from remote Kroki
   - If `--keep-svg` is used with `kroki`, the script fetches remote SVG separately and saves it locally
 - For automatic Node.js bootstrap (when system Node is absent): `curl` and `tar`
+
+## Install bootstrap
+
+Install and verify the pinned local renderer dependencies up front:
+
+```bash
+python3 scripts/bootstrap_renderer_env.py
+```
+
+This bootstrap step installs or verifies:
+- local Node.js
+- `mmdc`
+- `kroki-local` pinned dependencies
+- Mermaid `11.12.3`
+- `puppeteer-core 23.11.1`
 
 ## Usage
 

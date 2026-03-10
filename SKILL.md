@@ -7,13 +7,19 @@ description: Render Mermaid diagrams into high-resolution PNG with sharp text (n
 
 ## Workflow
 
-1. Save Mermaid text to a `.mmd` file.
-2. Choose backend by intent:
+1. On install or first use, bootstrap the pinned local dependencies:
+
+```bash
+python3 scripts/bootstrap_renderer_env.py
+```
+
+2. Save Mermaid text to a `.mmd` file.
+3. Choose backend by intent:
    - If the user wants a high-resolution PNG, prefer `mmdc` first, then `kroki-local`.
    - Use `kroki` only when the user explicitly asks for Kroki output or Kroki compatibility.
    - If using `kroki`, tell the user that remote PNG size is fixed and `--scale` will not change it.
-3. Run `scripts/render_mermaid_png.py` to render PNG natively from SVG.
-4. Return the output path and rendered pixel size.
+4. Run `scripts/render_mermaid_png.py` to render PNG natively from SVG.
+5. Return the output path and rendered pixel size.
 
 Use this command:
 
@@ -39,7 +45,8 @@ python3 scripts/render_mermaid_png.py \
 
 - Default to `mmdc` for PNG output so flowchart labels are preserved.
 - Add `kroki-local`, a local CLI/backend that targets Kroki-like Mermaid output.
-- Auto-install local `mmdc` when missing (`~/.local/mermaid-hq-png-export`).
+- Bootstrap and pin local dependencies under `~/.local/mermaid-hq-png-export`.
+- Keep renderer-side auto-install as a fallback, not the primary installation mechanism.
 - `auto` fallback order is `mmdc` -> `kroki-local` -> `kroki`.
 - For high-resolution requests, prefer `mmdc` or `kroki-local`; do not choose remote `kroki` unless the user specifically wants Kroki output.
 - Do not inject `flowchart.htmlLabels=false` by default; it breaks HTML-styled labels in tested `block-beta` cases.
@@ -55,6 +62,7 @@ python3 scripts/render_mermaid_png.py \
     - `--scale` does not change remote Kroki PNG size; the renderer warns when `backend=kroki` is used with a scale other than `1`.
 - Auto-install dependencies:
   - `curl` and `tar` are needed if Node.js must be downloaded automatically.
+  - `scripts/bootstrap_renderer_env.py` installs the expected local toolchain up front and verifies the installed versions.
   - `kroki-local` packages are installed locally under `~/.local/mermaid-hq-png-export/kroki-mermaid-local-cli`.
   - `kroki-local` pins Mermaid `11.12.3`, and regression tests verify the installed version matches.
 
