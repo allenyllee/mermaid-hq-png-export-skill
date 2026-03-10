@@ -17,8 +17,7 @@ Use this command:
 python3 scripts/render_mermaid_png.py \
   --input /abs/path/diagram.mmd \
   --output /abs/path/diagram-4x.png \
-  --scale 4 \
-  --target-width 2000
+  --scale 4
 ```
 
 Batch mode:
@@ -38,7 +37,6 @@ python3 scripts/render_mermaid_png.py \
 - Auto-install local `mmdc` when missing (`~/.local/mermaid-hq-png-export`).
 - Fall back to `kroki` only when `mmdc` install is unavailable.
 - Keep Mermaid init config `flowchart.htmlLabels=false` to reduce label loss risk.
-- Support `--target-width` for stable final width across backends.
 
 ## Requirements
 
@@ -58,13 +56,11 @@ python3 tests/run_regression_tests.py
 
 Expected behavior:
 - `mmdc_flowchart_text`: PASS
-- `mmdc_target_width`: PASS
 - `kroki_flowchart_text`: XFAIL (known limitation: some flowcharts lose text in PNG)
-- `kroki_target_width`: PASS (when Kroki is reachable)
 
 ## Troubleshooting
 
 - If local Chromium sandbox blocks `mmdc` in restricted environments, run outside sandbox or with compatible Chromium flags.
 - If `mmdc` install fails and Kroki is unavailable, install Node.js + `@mermaid-js/mermaid-cli` manually.
 - If text still disappears, verify the SVG contains `<text>` nodes, not only `<foreignObject>`.
-- If output is too large/small, change `--scale` or set `--target-width`.
+- If output is too large/small, change `--scale`.

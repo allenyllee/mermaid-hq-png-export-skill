@@ -67,7 +67,6 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="mermaid-skill-regression-") as tmp:
         out = pathlib.Path(tmp)
-        block_src = CASES / "arch1-block-beta.mmd"
 
         # 1) mmdc regression: flowchart text must be visible in PNG.
         flow_src = CASES / "arch2-flowchart.mmd"
@@ -99,31 +98,6 @@ def main() -> int:
             else:
                 report("PASS", "mmdc_flowchart_text", f"dark ratio={ratio:.4f}")
 
-        # 1b) mmdc target-width must be honored.
-        mmdc_target_png = out / "arch1-mmdc-w2000.png"
-        rc, so, se = run_renderer(
-            [
-                "--backend",
-                "mmdc",
-                "--input",
-                str(block_src),
-                "--output",
-                str(mmdc_target_png),
-                "--target-width",
-                "2000",
-            ]
-        )
-        if rc != 0:
-            failures += 1
-            report("FAIL", "mmdc_target_width", f"renderer failed: {se.strip() or so.strip()}")
-        else:
-            width, _ = png_size(mmdc_target_png)
-            if abs(width - 2000) > 8:
-                failures += 1
-                report("FAIL", "mmdc_target_width", f"expected width~2000, got {width}")
-            else:
-                report("PASS", "mmdc_target_width", f"width={width}")
-
         # 2) kroki known limitation: this flowchart often loses text in PNG (XFAIL).
         flow_png_kroki = out / "arch2-kroki.png"
         flow_svg_kroki = out / "arch2-kroki.svg"
@@ -153,6 +127,7 @@ def main() -> int:
                 report("PASS", "kroki_flowchart_text", f"limitation not observed (dark ratio={ratio:.4f})")
 
         # 3) kroki sanity check for block-beta case (expected to show text).
+        block_src = CASES / "arch1-block-beta.mmd"
         block_png_kroki = out / "arch1-kroki.png"
         rc, so, se = run_renderer(
             [
@@ -176,31 +151,6 @@ def main() -> int:
                 report("FAIL", "kroki_block_beta_text", f"unexpected low dark ratio ({ratio:.4f})")
             else:
                 report("PASS", "kroki_block_beta_text", f"dark ratio={ratio:.4f}")
-
-        # 3b) kroki target-width should be honored when Kroki is available.
-        kroki_target_png = out / "arch1-kroki-w1800.png"
-        rc, so, se = run_renderer(
-            [
-                "--backend",
-                "kroki",
-                "--input",
-                str(block_src),
-                "--output",
-                str(kroki_target_png),
-                "--target-width",
-                "1800",
-            ]
-        )
-        if rc != 0:
-            xfails += 1
-            report("XFAIL", "kroki_target_width", f"kroki render unavailable: {se.strip() or so.strip()}")
-        else:
-            width, _ = png_size(kroki_target_png)
-            if abs(width - 1800) > 8:
-                failures += 1
-                report("FAIL", "kroki_target_width", f"expected width~1800, got {width}")
-            else:
-                report("PASS", "kroki_target_width", f"width={width}")
 
     print(f"Summary: FAIL={failures}, XFAIL={xfails}")
     return 1 if failures else 0
