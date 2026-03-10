@@ -55,8 +55,9 @@ python3 scripts/render_mermaid_png.py \
 
 - Runtime:
   - For default `mmdc`: no preinstalled `mmdc` required (script auto-installs).
-  - For `kroki-local`: local Chromium/Chrome is required.
-    - The skill uses `puppeteer-core`, not `puppeteer`, so Chrome/Chromium is not downloaded automatically.
+  - For `kroki-local`: prefer local Chromium/Chrome, but bundled browser fallback is supported.
+    - If local Chrome/Chromium is found, use it with `puppeteer-core`.
+    - If local Chrome/Chromium is not found, install `puppeteer` and use its bundled browser.
   - For `kroki` fallback/path: `curl` and network access to `https://kroki.io`.
     - The current `kroki` path fetches PNG directly from remote Kroki.
     - If `--keep-svg` is requested, the renderer fetches remote SVG separately and saves it locally.
@@ -66,6 +67,7 @@ python3 scripts/render_mermaid_png.py \
   - `scripts/bootstrap_renderer_env.py` installs the expected local toolchain up front and verifies the installed versions.
   - `kroki-local` packages are installed locally under `~/.local/mermaid-hq-png-export/kroki-mermaid-local-cli`.
   - `kroki-local` pins Mermaid `11.12.3`, and regression tests verify the installed version matches.
+  - Regression tests also verify that `kroki-local` is using either the expected `puppeteer-core` version or the expected `puppeteer` version.
 
 ## Regression Tests
 

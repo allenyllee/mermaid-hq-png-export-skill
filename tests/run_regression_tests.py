@@ -81,6 +81,21 @@ def expected_kroki_local_version() -> str:
     return match.group(1)
 
 
+def expected_kroki_local_puppeteer_versions() -> tuple[str, str]:
+    text = RENDERER.read_text(encoding="utf-8")
+    core_match = re.search(
+        r'DEFAULT_PUPPETEER_CORE_VERSION = os\.environ\.get\("MERMAID_SKILL_PPTR_CORE_VERSION", "([^"]+)"\)',
+        text,
+    )
+    full_match = re.search(
+        r'DEFAULT_PUPPETEER_VERSION = os\.environ\.get\("MERMAID_SKILL_PPTR_VERSION", "([^"]+)"\)',
+        text,
+    )
+    if not core_match or not full_match:
+        raise RuntimeError("Could not find expected puppeteer versions in renderer")
+    return core_match.group(1), full_match.group(1)
+
+
 def installed_package_version(module_root: pathlib.Path, package_name: str) -> str | None:
     package_path = module_root / "node_modules" / package_name / "package.json"
     if not package_path.exists():
@@ -117,6 +132,7 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="mermaid-skill-regression-") as tmp:
         out = pathlib.Path(tmp)
         expected_kroki_version = expected_kroki_local_version()
+        expected_pptr_core_version, expected_pptr_version = expected_kroki_local_puppeteer_versions()
 
         # 1) mmdc regression: flowchart text must be visible in PNG.
         flow_src = CASES / "arch2-flowchart.mmd"
@@ -293,6 +309,22 @@ def main() -> int:
                 "FAIL",
                 "kroki_local_mermaid_version",
                 f"expected={expected_kroki_version}, got={installed_kroki_version or 'missing'}",
+            )
+
+        installed_pptr_core_version = installed_package_version(KROKI_LOCAL_ROOT, "puppeteer-core")
+        installed_pptr_version = installed_package_version(KROKI_LOCAL_ROOT, "puppeteer")
+        if installed_pptr_core_version == expected_pptr_core_version:
+            report("PASS", "kroki_local_puppeteer_package", f"package=puppeteer-core version={installed_pptr_core_version}")
+        elif installed_pptr_version == expected_pptr_version:
+            report("PASS", "kroki_local_puppeteer_package", f"package=puppeteer version={installed_pptr_version}")
+        else:
+            failures += 1
+            report(
+                "FAIL",
+                "kroki_local_puppeteer_package",
+                "expected either "
+                f"puppeteer-core={expected_pptr_core_version} or puppeteer={expected_pptr_version}, "
+                f"got puppeteer-core={installed_pptr_core_version or 'missing'}, puppeteer={installed_pptr_version or 'missing'}",
             )
 
         html_cases = [

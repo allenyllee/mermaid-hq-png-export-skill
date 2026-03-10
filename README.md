@@ -24,8 +24,9 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Python 3
 - Runtime:
   - Default path (`mmdc`) auto-installs local dependencies under `~/.local/mermaid-hq-png-export`
-  - `kroki-local` needs a local Chromium/Chrome executable
-  - This skill uses `puppeteer-core`, not `puppeteer`, so Chrome/Chromium is not downloaded automatically
+  - `kroki-local` prefers a local Chromium/Chrome executable but can fall back to a bundled browser via `puppeteer`
+  - If local Chrome/Chromium is found, the skill uses `puppeteer-core` with that browser
+  - If no local Chrome/Chromium is found, the skill installs `puppeteer` and uses its bundled browser
   - Kroki path needs `curl` + network access to `https://kroki.io`
   - Current `kroki` backend fetches PNG directly from remote Kroki
   - If `--keep-svg` is used with `kroki`, the script fetches remote SVG separately and saves it locally
@@ -44,10 +45,10 @@ This bootstrap step installs or verifies:
 - `mmdc`
 - `kroki-local` pinned dependencies
 - Mermaid `11.12.3`
-- `puppeteer-core 23.11.1`
+- `puppeteer-core 23.11.1` with local Chrome/Chromium when available
+- otherwise `puppeteer 23.11.1` with a bundled browser download
 
-You still need a local Chrome/Chromium executable for `kroki-local`.
-If it is not on the standard paths, set:
+If you want `kroki-local` to use a specific local browser, set:
 
 ```bash
 export MERMAID_SKILL_CHROME=/abs/path/to/chrome
@@ -153,6 +154,7 @@ Expected:
 - In the current regression suite, remote direct Kroki PNG also removes the earlier flowchart text-loss seen with `remote SVG + local rasterize`.
 - When `backend=kroki`, the script prints a warning if `--scale` is not `1`, because remote Kroki PNG size is returned as-is.
 - `kroki-local` uses a local CLI and aims to stay close to Kroki Mermaid geometry, but exact parity can still depend on Chromium/font environment.
+- `kroki-local` prefers local Chrome/Chromium with `puppeteer-core`; if none is available, it falls back to `puppeteer` with a bundled browser.
 - `kroki-local` pins Mermaid to `11.12.3` to stay aligned with the Kroki version verified during development, and regression tests check that installed version.
 
 ## Design Notes

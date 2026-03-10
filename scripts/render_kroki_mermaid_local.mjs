@@ -27,7 +27,7 @@ async function main() {
   const outputSvg = args.outputSvg ? path.resolve(args.outputSvg) : '';
   const outputPng = args.outputPng ? path.resolve(args.outputPng) : '';
   const moduleRoot = path.resolve(args.moduleRoot || '');
-  const chromePath = path.resolve(args.chromePath || '');
+  const chromePath = args.chromePath ? path.resolve(args.chromePath) : '';
   const scale = Number(args.scale || '1');
 
   if (!inputPath) {
@@ -39,21 +39,32 @@ async function main() {
   if (!moduleRoot) {
     throw new Error('--moduleRoot is required');
   }
-  if (!chromePath) {
-    throw new Error('--chromePath is required');
-  }
   if (!Number.isFinite(scale) || scale <= 0) {
     throw new Error('--scale must be > 0');
   }
 
   const requireFromRoot = createRequire(path.join(moduleRoot, 'resolver.cjs'));
-  const puppeteer = requireFromRoot('puppeteer-core');
+  let puppeteerPackage = 'puppeteer-core';
+  let puppeteer;
+  try {
+    puppeteer = requireFromRoot('puppeteer-core');
+  } catch {
+    puppeteerPackage = 'puppeteer';
+    puppeteer = requireFromRoot('puppeteer');
+  }
   const mermaidBundlePath = requireFromRoot.resolve('mermaid/dist/mermaid.min.js');
   const mermaidBundle = fs.readFileSync(mermaidBundlePath, 'utf8').replace(/<\/script/gi, '<\\/script');
   const source = fs.readFileSync(inputPath, 'utf8');
+  const executablePath = chromePath || (typeof puppeteer.executablePath === 'function' ? puppeteer.executablePath() : '');
+
+  if (!executablePath) {
+    throw new Error(
+      `No browser executable available. Provide --chromePath or install \`${puppeteerPackage}\` with a bundled browser.`
+    );
+  }
 
   const browser = await puppeteer.launch({
-    executablePath: chromePath,
+    executablePath,
     headless: true,
     args: [
       '--no-sandbox',

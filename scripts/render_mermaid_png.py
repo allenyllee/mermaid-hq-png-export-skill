@@ -15,6 +15,7 @@ KROKI_PNG_URL = "https://kroki.io/mermaid/png"
 DEFAULT_NODE_VERSION = os.environ.get("MERMAID_SKILL_NODE_VERSION", "v24.14.0")
 DEFAULT_KROKI_LOCAL_MERMAID_VERSION = os.environ.get("MERMAID_SKILL_KROKI_LOCAL_VERSION", "11.12.3")
 DEFAULT_PUPPETEER_CORE_VERSION = os.environ.get("MERMAID_SKILL_PPTR_CORE_VERSION", "23.11.1")
+DEFAULT_PUPPETEER_VERSION = os.environ.get("MERMAID_SKILL_PPTR_VERSION", "23.11.1")
 
 SKILL_LOCAL_ROOT = pathlib.Path.home() / ".local/mermaid-hq-png-export"
 LOCAL_NODE_ROOT = SKILL_LOCAL_ROOT / "node"
@@ -199,11 +200,7 @@ def resolve_chromium() -> str | None:
 
 
 def kroki_local_modules_ready() -> bool:
-    return modules_match_expected(
-        module_root=LOCAL_KROKI_LOCAL_ROOT,
-        mermaid_version=DEFAULT_KROKI_LOCAL_MERMAID_VERSION,
-        pptr_version=DEFAULT_PUPPETEER_CORE_VERSION,
-    )
+    return current_kroki_local_puppeteer_package() is not None
 
 
 def read_installed_package_version(module_root: pathlib.Path, package_name: str) -> str | None:
@@ -218,11 +215,20 @@ def read_installed_package_version(module_root: pathlib.Path, package_name: str)
     return version if isinstance(version, str) else None
 
 
-def modules_match_expected(module_root: pathlib.Path, mermaid_version: str, pptr_version: str) -> bool:
-    return (
-        read_installed_package_version(module_root, "mermaid") == mermaid_version
-        and read_installed_package_version(module_root, "puppeteer-core") == pptr_version
-    )
+def current_kroki_local_puppeteer_package() -> tuple[str, str] | None:
+    mermaid_version = read_installed_package_version(LOCAL_KROKI_LOCAL_ROOT, "mermaid")
+    if mermaid_version != DEFAULT_KROKI_LOCAL_MERMAID_VERSION:
+        return None
+
+    pptr_core_version = read_installed_package_version(LOCAL_KROKI_LOCAL_ROOT, "puppeteer-core")
+    if pptr_core_version == DEFAULT_PUPPETEER_CORE_VERSION:
+        return ("puppeteer-core", pptr_core_version)
+
+    pptr_version = read_installed_package_version(LOCAL_KROKI_LOCAL_ROOT, "puppeteer")
+    if pptr_version == DEFAULT_PUPPETEER_VERSION:
+        return ("puppeteer", pptr_version)
+
+    return None
 
 
 def install_kroki_local() -> bool:
@@ -237,15 +243,15 @@ def install_kroki_local() -> bool:
     if not (node and npm):
         return False
 
-    chrome_path = resolve_chromium()
-    if chrome_path is None:
-        print(
-            "Cannot enable backend=kroki-local: no Chromium/Chrome executable found.",
-            file=sys.stderr,
-        )
-        return False
-
     LOCAL_KROKI_LOCAL_ROOT.mkdir(parents=True, exist_ok=True)
+    chrome_path = resolve_chromium()
+    prefer_local_browser = chrome_path is not None
+    puppeteer_pkg = (
+        f"puppeteer-core@{DEFAULT_PUPPETEER_CORE_VERSION}"
+        if prefer_local_browser
+        else f"puppeteer@{DEFAULT_PUPPETEER_VERSION}"
+    )
+    remove_pkg = "puppeteer" if prefer_local_browser else "puppeteer-core"
     cmd = [
         npm,
         "install",
@@ -255,14 +261,21 @@ def install_kroki_local() -> bool:
         "--no-audit",
         "--save-exact",
         f"mermaid@{DEFAULT_KROKI_LOCAL_MERMAID_VERSION}",
-        f"puppeteer-core@{DEFAULT_PUPPETEER_CORE_VERSION}",
+        puppeteer_pkg,
     ]
-    print("Installing local Kroki-style Mermaid renderer dependencies...", file=sys.stderr)
+    if prefer_local_browser:
+        print("Installing local Kroki-style Mermaid renderer dependencies with `puppeteer-core`...", file=sys.stderr)
+    else:
+        print("Installing local Kroki-style Mermaid renderer dependencies with bundled `puppeteer`...", file=sys.stderr)
     proc = run_cmd(cmd, env=mmdc_env())
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout).strip() or "npm install failed"
         print(f"kroki-local install failed: {err}", file=sys.stderr)
         return False
+    cleanup = run_cmd([npm, "uninstall", "--prefix", str(LOCAL_KROKI_LOCAL_ROOT), remove_pkg], env=mmdc_env())
+    if cleanup.returncode != 0 and "not in this workspace" not in (cleanup.stderr or ""):
+        err = (cleanup.stderr or cleanup.stdout).strip() or "npm uninstall failed"
+        print(f"kroki-local cleanup warning: {err}", file=sys.stderr)
     return kroki_local_modules_ready()
 
 
@@ -273,8 +286,6 @@ def resolve_backend(requested: str) -> str:
         return "kroki"
 
     if requested == "kroki-local":
-        if resolve_chromium() is None:
-            raise SystemExit("backend=kroki-local requires local Chromium/Chrome")
         if not install_kroki_local():
             raise SystemExit("backend=kroki-local could not install required packages")
         return "kroki-local"
@@ -283,10 +294,9 @@ def resolve_backend(requested: str) -> str:
     if resolve_mmdc() is None:
         print("`mmdc` not found. Trying local install...", file=sys.stderr)
         if not install_mmdc():
-            if resolve_chromium() is not None:
-                print("`mmdc` unavailable; trying backend=kroki-local.", file=sys.stderr)
-                if install_kroki_local():
-                    return "kroki-local"
+            print("`mmdc` unavailable; trying backend=kroki-local.", file=sys.stderr)
+            if install_kroki_local():
+                return "kroki-local"
             if shutil.which("curl"):
                 print("`mmdc` unavailable; fallback to backend=kroki.", file=sys.stderr)
                 return "kroki"
@@ -445,10 +455,6 @@ def render_svg_kroki_local_source(source: str) -> str:
         raise SystemExit("backend=kroki-local requires Node.js")
     if not kroki_local_modules_ready() and not install_kroki_local():
         raise SystemExit("backend=kroki-local could not install required packages")
-    chrome_path = resolve_chromium()
-    if chrome_path is None:
-        raise SystemExit("backend=kroki-local requires local Chromium/Chrome")
-
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = pathlib.Path(tmpdir)
         mmd_path = tmpdir_path / "input.mmd"
@@ -463,9 +469,10 @@ def render_svg_kroki_local_source(source: str) -> str:
             str(svg_path),
             "--moduleRoot",
             str(LOCAL_KROKI_LOCAL_ROOT),
-            "--chromePath",
-            chrome_path,
         ]
+        chrome_path = resolve_chromium()
+        if chrome_path is not None:
+            cmd.extend(["--chromePath", chrome_path])
         proc = subprocess.run(cmd, capture_output=True, text=True, env=mmdc_env())
         if proc.returncode != 0:
             err = proc.stderr.strip() or proc.stdout.strip() or "unknown kroki-local error"
@@ -487,10 +494,6 @@ def render_png_kroki_local(
         raise SystemExit("backend=kroki-local requires Node.js")
     if not kroki_local_modules_ready() and not install_kroki_local():
         raise SystemExit("backend=kroki-local could not install required packages")
-    chrome_path = resolve_chromium()
-    if chrome_path is None:
-        raise SystemExit("backend=kroki-local requires local Chromium/Chrome")
-
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = pathlib.Path(tmpdir)
         mmd_path = tmpdir_path / "input.mmd"
@@ -512,11 +515,12 @@ def render_png_kroki_local(
             str(svg_path),
             "--moduleRoot",
             str(LOCAL_KROKI_LOCAL_ROOT),
-            "--chromePath",
-            chrome_path,
             "--scale",
             str(scale),
         ]
+        chrome_path = resolve_chromium()
+        if chrome_path is not None:
+            cmd.extend(["--chromePath", chrome_path])
         proc = subprocess.run(cmd, capture_output=True, text=True, env=mmdc_env())
         if proc.returncode != 0:
             err = proc.stderr.strip() or proc.stdout.strip() or "unknown kroki-local error"
