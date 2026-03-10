@@ -8,7 +8,6 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Auto-installs `mmdc` locally when missing
 - Adds `kroki-local`, a local CLI/backend intended to stay close to Kroki Mermaid output
 - Falls back in this order: `mmdc` -> `kroki-local` -> Kroki
-- Ensures labels stay visible by using Mermaid init config with `flowchart.htmlLabels=false`
 - Supports batch export for multiple `.mmd` files in one command
 
 ## Repository structure
@@ -23,7 +22,8 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
 - Runtime:
   - Default path (`mmdc`) auto-installs local dependencies under `~/.local/mermaid-hq-png-export`
   - `kroki-local` needs a local Chromium/Chrome executable
-  - Kroki path needs `curl` + `ffmpeg` + network access to `https://kroki.io`
+- Kroki path needs `curl` + `ffmpeg` + network access to `https://kroki.io`
+  - Current `kroki` backend fetches SVG from remote Kroki, then rasterizes PNG locally with `ffmpeg`
 - For automatic Node.js bootstrap (when system Node is absent): `curl` and `tar`
 
 ## Usage
@@ -110,6 +110,8 @@ Expected:
 - `mmdc_flowchart_text`: PASS
 - `kroki_local_flowchart_text`: PASS
 - `kroki_local_block_beta_geometry`: PASS
+- `mmdc_flowchart_html_style`: PASS
+- `kroki-local_block_beta_html_style`: PASS
 - `kroki_flowchart_text`: XFAIL (known limitation for this flowchart case)
 
 ## Notes
@@ -132,6 +134,10 @@ These implementation choices are based on direct experiments against `mmdc`, rem
   - It made the SVG more XML-safe, but node labels still remained `foreignObject`.
 - Changing `kroki-local` PNG output to browser screenshot fixed the flowchart text-loss case.
   - This is now the default `kroki-local` PNG path.
+- A later HTML-style experiment showed that globally injecting `flowchart.htmlLabels=false` was too aggressive.
+  - It caused `block-beta` labels to render raw HTML tags instead of styled content.
+  - It also pushed remote `kroki` flowcharts back toward the text-loss path.
+  - The skill no longer injects `flowchart.htmlLabels=false` by default.
 - Mermaid version materially affects layout.
   - `kroki-local` with Mermaid `11.12.3` stays much closer to current Kroki output than `11.13.0`.
   - The skill therefore pins `kroki-local` Mermaid to `11.12.3`.

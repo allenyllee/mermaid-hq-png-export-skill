@@ -11,7 +11,6 @@ import sys
 import tempfile
 
 KROKI_URL = "https://kroki.io/mermaid/svg"
-INIT_LINE = '%%{init: { "flowchart": { "htmlLabels": false } } }%%\n'
 DEFAULT_NODE_VERSION = os.environ.get("MERMAID_SKILL_NODE_VERSION", "v24.14.0")
 DEFAULT_KROKI_LOCAL_MERMAID_VERSION = os.environ.get("MERMAID_SKILL_KROKI_LOCAL_VERSION", "11.12.3")
 DEFAULT_PUPPETEER_CORE_VERSION = os.environ.get("MERMAID_SKILL_PPTR_CORE_VERSION", "23.11.1")
@@ -296,12 +295,6 @@ def resolve_backend(requested: str) -> str:
     return "mmdc"
 
 
-def prepare_mermaid_source(raw: str) -> str:
-    if "htmlLabels" in raw:
-        return raw
-    return INIT_LINE + raw
-
-
 def fetch_svg_kroki(mermaid_source: str) -> str:
     cmd = [
         "curl",
@@ -395,7 +388,6 @@ def render_png_kroki(
         raise SystemExit("backend=kroki requires `curl` and `ffmpeg`")
 
     source = in_path.read_text(encoding="utf-8")
-    source = prepare_mermaid_source(source)
     try:
         svg = fetch_svg_kroki(source)
     except RuntimeError as exc:
@@ -434,7 +426,6 @@ def render_png_mmdc(
         raise SystemExit("Missing required tool: mmdc")
 
     source = in_path.read_text(encoding="utf-8")
-    source = prepare_mermaid_source(source)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = pathlib.Path(tmpdir)
@@ -542,7 +533,7 @@ def render_png_kroki_local(
     scale: float,
     keep_svg_path: pathlib.Path | None,
 ) -> tuple[int, int]:
-    source = prepare_mermaid_source(in_path.read_text(encoding="utf-8"))
+    source = in_path.read_text(encoding="utf-8")
     node, _npm = resolve_node_tools()
     if node is None:
         raise SystemExit("backend=kroki-local requires Node.js")

@@ -37,7 +37,7 @@ python3 scripts/render_mermaid_png.py \
 - Add `kroki-local`, a local CLI/backend that targets Kroki-like Mermaid output.
 - Auto-install local `mmdc` when missing (`~/.local/mermaid-hq-png-export`).
 - `auto` fallback order is `mmdc` -> `kroki-local` -> `kroki`.
-- Keep Mermaid init config `flowchart.htmlLabels=false` to reduce label loss risk.
+- Do not inject `flowchart.htmlLabels=false` by default; it breaks HTML-styled labels in tested `block-beta` cases.
 
 ## Requirements
 
@@ -45,6 +45,7 @@ python3 scripts/render_mermaid_png.py \
   - For default `mmdc`: no preinstalled `mmdc` required (script auto-installs).
   - For `kroki-local`: local Chromium/Chrome is required.
   - For `kroki` fallback/path: `curl`, `ffmpeg`, and network access to `https://kroki.io`.
+    - The current `kroki` path fetches SVG from remote Kroki and rasterizes PNG locally.
 - Auto-install dependencies:
   - `curl` and `tar` are needed if Node.js must be downloaded automatically.
   - `kroki-local` packages are installed locally under `~/.local/mermaid-hq-png-export/kroki-mermaid-local-cli`.
@@ -76,4 +77,5 @@ Expected behavior:
 
 - `kroki-local` keeps a Kroki-style Mermaid SVG path, but PNG output uses browser screenshot instead of `ffmpeg`.
 - This change was chosen after verifying that serializer-only normalization does not fix flowchart labels when SVG still contains `foreignObject`.
+- HTML-styled label regressions are covered in tests for both `flowchart` and `block-beta`.
 - `kroki-local` Mermaid is pinned to `11.12.3` because it stays closer to current Kroki layout than `11.13.0` in the tested `block-beta` case.

@@ -55,6 +55,21 @@ def svg_viewbox(path: pathlib.Path) -> tuple[float, float, float, float]:
     return vals[0], vals[1], vals[2], vals[3]
 
 
+def svg_contains_literal_html_tags(path: pathlib.Path) -> bool:
+    text = path.read_text(encoding="utf-8", errors="ignore").lower()
+    return any(tag in text for tag in ("<b>", "<i>", "<span", "<font", "<br"))
+
+
+def svg_contains_escaped_html_tags(path: pathlib.Path) -> bool:
+    text = path.read_text(encoding="utf-8", errors="ignore").lower()
+    return any(tag in text for tag in ("&lt;b&gt;", "&lt;i&gt;", "&lt;span", "&lt;font", "&lt;br"))
+
+
+def svg_contains_all_labels(path: pathlib.Path, labels: list[str]) -> bool:
+    text = path.read_text(encoding="utf-8", errors="ignore")
+    return all(label in text for label in labels)
+
+
 def expected_kroki_local_version() -> str:
     text = RENDERER.read_text(encoding="utf-8")
     match = re.search(
@@ -239,12 +254,15 @@ def main() -> int:
             xfails += 1
             report("XFAIL", "kroki_block_beta_text", f"kroki render unavailable: {se.strip() or so.strip()}")
         else:
-            ratio = dark_pixel_ratio(block_png_kroki)
-            if ratio < 0.01:
+            labels_ok = svg_contains_all_labels(
+                block_svg_kroki,
+                ["GPIO", "HWM", "Backend Adapter Layer", "Driver", "CLI", "OS"],
+            )
+            if not labels_ok:
                 failures += 1
-                report("FAIL", "kroki_block_beta_text", f"unexpected low dark ratio ({ratio:.4f})")
+                report("FAIL", "kroki_block_beta_text", "expected block-beta labels missing from SVG")
             else:
-                report("PASS", "kroki_block_beta_text", f"dark ratio={ratio:.4f}")
+                report("PASS", "kroki_block_beta_text", "expected block-beta labels found in SVG")
 
         if block_svg_kroki.exists() and block_svg_kroki_local.exists():
             _, ky, kw, kh = svg_viewbox(block_svg_kroki)
@@ -276,6 +294,65 @@ def main() -> int:
                 "kroki_local_mermaid_version",
                 f"expected={expected_kroki_version}, got={installed_kroki_version or 'missing'}",
             )
+
+        html_cases = [
+            ("flowchart", CASES / "html-style-flowchart.mmd"),
+            ("block_beta", CASES / "html-style-block-beta.mmd"),
+        ]
+        html_backends = [
+            ("mmdc", False),
+            ("kroki-local", False),
+            ("kroki", True),
+        ]
+
+        for case_name, case_path in html_cases:
+            for backend, xfail_on_error in html_backends:
+                html_png = out / f"html-{case_name}-{backend}.png"
+                html_svg = out / f"html-{case_name}-{backend}.svg"
+                rc, so, se = run_renderer(
+                    [
+                        "--backend",
+                        backend,
+                        "--input",
+                        str(case_path),
+                        "--output",
+                        str(html_png),
+                        "--scale",
+                        "2",
+                        "--keep-svg",
+                        str(html_svg),
+                    ]
+                )
+                test_name = f"{backend}_{case_name}_html_style"
+                if rc != 0:
+                    if xfail_on_error:
+                        xfails += 1
+                        report("XFAIL", test_name, f"renderer unavailable: {se.strip() or so.strip()}")
+                    else:
+                        failures += 1
+                        report("FAIL", test_name, f"renderer failed: {se.strip() or so.strip()}")
+                    continue
+
+                if not html_svg.exists():
+                    failures += 1
+                    report("FAIL", test_name, "missing SVG output")
+                    continue
+
+                escaped = svg_contains_escaped_html_tags(html_svg)
+                literal = svg_contains_literal_html_tags(html_svg)
+                if escaped or not literal:
+                    failures += 1
+                    report(
+                        "FAIL",
+                        test_name,
+                        f"escaped={escaped}, literal={literal}",
+                    )
+                else:
+                    report(
+                        "PASS",
+                        test_name,
+                        f"escaped={escaped}, literal={literal}",
+                    )
 
     print(f"Summary: FAIL={failures}, XFAIL={xfails}")
     return 1 if failures else 0
