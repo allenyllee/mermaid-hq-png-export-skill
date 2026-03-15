@@ -44,13 +44,22 @@ async function main() {
   }
 
   const requireFromRoot = createRequire(path.join(moduleRoot, 'resolver.cjs'));
-  let puppeteerPackage = 'puppeteer-core';
+  const preferCore = Boolean(chromePath);
+  const packageOrder = preferCore ? ['puppeteer-core', 'puppeteer'] : ['puppeteer', 'puppeteer-core'];
+  let puppeteerPackage = '';
   let puppeteer;
-  try {
-    puppeteer = requireFromRoot('puppeteer-core');
-  } catch {
-    puppeteerPackage = 'puppeteer';
-    puppeteer = requireFromRoot('puppeteer');
+  let lastError;
+  for (const packageName of packageOrder) {
+    try {
+      puppeteer = requireFromRoot(packageName);
+      puppeteerPackage = packageName;
+      break;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (!puppeteer) {
+    throw lastError || new Error('Could not load puppeteer or puppeteer-core');
   }
   const mermaidBundlePath = requireFromRoot.resolve('mermaid/dist/mermaid.min.js');
   const mermaidBundle = fs.readFileSync(mermaidBundlePath, 'utf8').replace(/<\/script/gi, '<\\/script');

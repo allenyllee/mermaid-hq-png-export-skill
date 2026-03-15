@@ -24,13 +24,37 @@ LOCAL_NODE_BIN = LOCAL_NODE_CURRENT / "bin"
 LOCAL_NPM_GLOBAL = SKILL_LOCAL_ROOT / "npm-global"
 LOCAL_KROKI_LOCAL_ROOT = SKILL_LOCAL_ROOT / "kroki-mermaid-local-cli"
 LOCAL_MMDC = LOCAL_NPM_GLOBAL / "bin" / "mmdc"
+LOCAL_MMDC_WINDOWS = LOCAL_NPM_GLOBAL / "mmdc"
 LEGACY_MMDC = pathlib.Path.home() / ".local/node/current/bin/mmdc"
 LEGACY_NODE_BIN = pathlib.Path.home() / ".local/node/current/bin"
 LOCAL_KROKI_LOCAL_SCRIPT = pathlib.Path(__file__).with_name("render_kroki_mermaid_local.mjs")
+IS_WINDOWS = platform.system().lower() == "windows"
 
 
 def run_cmd(cmd: list[str], *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, capture_output=True, text=True, env=env)
+
+
+def executable_candidates(base: pathlib.Path | str) -> list[str]:
+    path = pathlib.Path(base)
+    if IS_WINDOWS:
+        return [str(path.with_suffix(".cmd")), str(path.with_suffix(".exe")), str(path), str(path.with_suffix(".ps1"))]
+    return [str(path)]
+
+
+def first_existing_path(candidates: list[str]) -> str | None:
+    for candidate in candidates:
+        if pathlib.Path(candidate).exists():
+            return candidate
+    return None
+
+
+def which_first(names: list[str]) -> str | None:
+    for name in names:
+        path = shutil.which(name)
+        if path:
+            return path
+    return None
 
 
 def mmdc_env() -> dict[str, str]:
@@ -40,41 +64,48 @@ def mmdc_env() -> dict[str, str]:
         prepend.append(str(LOCAL_NODE_BIN))
     if LEGACY_NODE_BIN.exists():
         prepend.append(str(LEGACY_NODE_BIN))
+    if LOCAL_NPM_GLOBAL.exists():
+        prepend.append(str(LOCAL_NPM_GLOBAL))
     if LOCAL_NPM_GLOBAL.joinpath("bin").exists():
         prepend.append(str(LOCAL_NPM_GLOBAL / "bin"))
     if LEGACY_MMDC.parent.exists():
         prepend.append(str(LEGACY_MMDC.parent))
     if prepend:
         current = env.get("PATH", "")
-        env["PATH"] = ":".join(prepend + ([current] if current else []))
+        env["PATH"] = os.pathsep.join(prepend + ([current] if current else []))
     return env
 
 
 def resolve_node_tools() -> tuple[str | None, str | None]:
-    node = shutil.which("node")
-    npm = shutil.which("npm")
+    node = which_first(["node", "node.exe"])
+    npm = which_first(["npm.cmd", "npm", "npm.exe"])
     if node and npm:
         return node, npm
 
-    fallback_node = LOCAL_NODE_BIN / "node"
-    fallback_npm = LOCAL_NODE_BIN / "npm"
-    if fallback_node.exists() and fallback_npm.exists():
-        return str(fallback_node), str(fallback_npm)
-    legacy_node = LEGACY_NODE_BIN / "node"
-    legacy_npm = LEGACY_NODE_BIN / "npm"
-    if legacy_node.exists() and legacy_npm.exists():
-        return str(legacy_node), str(legacy_npm)
+    fallback_node = first_existing_path(executable_candidates(LOCAL_NODE_BIN / "node"))
+    fallback_npm = first_existing_path(executable_candidates(LOCAL_NODE_BIN / "npm"))
+    if fallback_node and fallback_npm:
+        return fallback_node, fallback_npm
+    legacy_node = first_existing_path(executable_candidates(LEGACY_NODE_BIN / "node"))
+    legacy_npm = first_existing_path(executable_candidates(LEGACY_NODE_BIN / "npm"))
+    if legacy_node and legacy_npm:
+        return legacy_node, legacy_npm
     return None, None
 
 
 def resolve_mmdc() -> str | None:
-    path = shutil.which("mmdc")
+    path = which_first(["mmdc.cmd", "mmdc", "mmdc.exe"])
     if path:
         return path
-    if LOCAL_MMDC.exists() and LOCAL_MMDC.is_file():
-        return str(LOCAL_MMDC)
-    if LEGACY_MMDC.exists() and LEGACY_MMDC.is_file():
-        return str(LEGACY_MMDC)
+    local_windows_mmdc = first_existing_path(executable_candidates(LOCAL_MMDC_WINDOWS))
+    if local_windows_mmdc:
+        return local_windows_mmdc
+    local_mmdc = first_existing_path(executable_candidates(LOCAL_MMDC))
+    if local_mmdc:
+        return local_mmdc
+    legacy_mmdc = first_existing_path(executable_candidates(LEGACY_MMDC))
+    if legacy_mmdc:
+        return legacy_mmdc
     return None
 
 
@@ -168,6 +199,9 @@ def install_mmdc() -> bool:
     ]
     proc = run_cmd(cmd, env=mmdc_env())
     if proc.returncode != 0:
+        existing = resolve_mmdc()
+        if existing is not None:
+            return True
         err = (proc.stderr or proc.stdout).strip() or "npm install failed"
         print(f"mmdc install failed: {err}", file=sys.stderr)
         return False
@@ -179,12 +213,23 @@ def resolve_chromium() -> str | None:
     env_path = os.environ.get("MERMAID_SKILL_CHROME") or os.environ.get("CHROME_BIN")
     cache_candidates = sorted(pathlib.Path.home().glob(".cache/puppeteer/chrome/*/chrome-linux64/chrome"))
     playwright_candidates = sorted(pathlib.Path.home().glob(".cache/ms-playwright/*/chrome-linux64/chrome"))
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    program_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
     candidates = [
         env_path,
         str(cache_candidates[-1]) if cache_candidates else None,
         str(playwright_candidates[-1]) if playwright_candidates else None,
+        str(pathlib.Path(local_app_data) / "Google/Chrome/Application/chrome.exe") if local_app_data else None,
+        str(pathlib.Path(local_app_data) / "Chromium/Application/chrome.exe") if local_app_data else None,
+        str(pathlib.Path(local_app_data) / "Microsoft/Edge/Application/msedge.exe") if local_app_data else None,
+        str(pathlib.Path(program_files) / "Google/Chrome/Application/chrome.exe"),
+        str(pathlib.Path(program_files_x86) / "Google/Chrome/Application/chrome.exe"),
+        str(pathlib.Path(program_files) / "Microsoft/Edge/Application/msedge.exe"),
+        str(pathlib.Path(program_files_x86) / "Microsoft/Edge/Application/msedge.exe"),
         shutil.which("chromium"),
         shutil.which("chromium-browser"),
+        shutil.which("msedge"),
         shutil.which("google-chrome"),
         shutil.which("google-chrome-stable"),
         "/snap/bin/chromium",
