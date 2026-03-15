@@ -32,6 +32,15 @@ Render Mermaid diagrams to high-resolution PNG with sharp text (not upscaled fro
   - If `--keep-svg` is used with `kroki`, the script fetches remote SVG separately and saves it locally
 - For automatic Node.js bootstrap (when system Node is absent): `curl` and `tar`
 
+## Windows support
+
+- Windows is supported.
+- The renderer detects Windows executable names such as `node.exe`, `npm.cmd`, and `mmdc.cmd`.
+- Bootstrap can reuse an already-installed Windows `mmdc` even if `npm` emits a cleanup warning while reinstalling.
+- `kroki-local` auto-detects common Microsoft Edge and Google Chrome install paths on Windows.
+- If a local browser is found, `kroki-local` prefers `puppeteer-core`; otherwise it falls back to bundled `puppeteer`.
+- You can still override browser detection with `MERMAID_SKILL_CHROME`.
+
 ## Install bootstrap
 
 Install and verify the pinned local renderer dependencies up front:
@@ -52,6 +61,12 @@ If you want `kroki-local` to use a specific local browser, set:
 
 ```bash
 export MERMAID_SKILL_CHROME=/abs/path/to/chrome
+```
+
+PowerShell example:
+
+```powershell
+$env:MERMAID_SKILL_CHROME='C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
 ```
 
 ## Usage
@@ -145,6 +160,16 @@ Expected:
 - `kroki_local_block_beta_geometry`: PASS
 - `mmdc_flowchart_html_style`: PASS
 - `kroki-local_block_beta_html_style`: PASS
+
+## Troubleshooting
+
+- If local Chromium sandbox blocks `mmdc` in restricted environments, run outside sandbox or with compatible Chromium flags.
+- If `backend=kroki-local` cannot start, set `MERMAID_SKILL_CHROME` to your Chromium/Chrome path.
+- On Windows, PowerShell execution policy can block `npm.ps1`; the renderer prefers `npm.cmd` automatically, so no policy change should be required.
+- On Windows, common Edge and Chrome install paths are checked automatically before falling back to bundled `puppeteer`.
+- If `mmdc` install fails and Kroki is unavailable, install Node.js + `@mermaid-js/mermaid-cli` manually.
+- If text still disappears, verify the SVG contains `<text>` nodes, not only `<foreignObject>`.
+- If output is too large/small, change `--scale`.
 
 ## Notes
 

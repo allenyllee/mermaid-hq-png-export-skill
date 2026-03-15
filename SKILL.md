@@ -55,9 +55,11 @@ python3 scripts/render_mermaid_png.py \
 
 - Runtime:
   - For default `mmdc`: no preinstalled `mmdc` required (script auto-installs).
+    - On Windows, the renderer detects `mmdc.cmd` and other Windows-specific executable names automatically.
   - For `kroki-local`: prefer local Chromium/Chrome, but bundled browser fallback is supported.
     - If local Chrome/Chromium is found, use it with `puppeteer-core`.
     - If local Chrome/Chromium is not found, install `puppeteer` and use its bundled browser.
+    - On Windows, common Edge and Chrome install paths are checked automatically before bundled-browser fallback.
   - For `kroki` fallback/path: `curl` and network access to `https://kroki.io`.
     - The current `kroki` path fetches PNG directly from remote Kroki.
     - If `--keep-svg` is requested, the renderer fetches remote SVG separately and saves it locally.
@@ -87,6 +89,7 @@ Expected behavior:
 
 - If local Chromium sandbox blocks `mmdc` in restricted environments, run outside sandbox or with compatible Chromium flags.
 - If `backend=kroki-local` cannot start, set `MERMAID_SKILL_CHROME` to your Chromium/Chrome path.
+- On Windows, PowerShell execution policy can block `npm.ps1`; the renderer prefers `npm.cmd` automatically, so no execution-policy change should be required.
 - If `mmdc` install fails and Kroki is unavailable, install Node.js + `@mermaid-js/mermaid-cli` manually.
 - If text still disappears, verify the SVG contains `<text>` nodes, not only `<foreignObject>`.
 - If output is too large/small, change `--scale`.
